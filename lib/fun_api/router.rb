@@ -20,7 +20,7 @@ module FunApi
           Regexp.escape(seg)
         end
       end.join('/')
-      @routes << Route.new(verb.upcase, %r{\A/#{regex}\z}, keys, handler)
+      @routes << Route.new(verb.upcase, /\A#{regex}\z/, keys, handler)
     end
 
     def call(env)

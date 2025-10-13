@@ -1,9 +1,13 @@
 # frozen_string_literal: true
 
+require 'async'
+require 'async/http/server'
+require 'async/http/endpoint'
+require 'protocol/rack'
 require 'fun_api/router'
 
 module FunApi
-  class Application
+  class App
     def initialize
       @router = Router.new
       @middleware_stack = []
@@ -11,13 +15,6 @@ module FunApi
       yield self if block_given?
     end
 
-    # Route registration
-    # %i[get post put patch delete].each do |method|
-    #   define_method(method) do |path, contract: nil, &handler|
-    #     add_route(method.to_s.upcase, path, contract, handler)
-    #   end
-    # end
-    #
     # GET
     def get(path, contract: nil, &blk)
       add_route('GET', path, contract: contract, &blk)
@@ -44,6 +41,44 @@ module FunApi
       @router.call(env)
     end
 
+    # Run the app with Falcon
+    def run!(host: 'localhost', port: 9292, **options)
+      puts "🚀 FunAPI server starting on http://#{host}:#{port}"
+      puts "📚 Environment: #{options[:environment] || 'development'}"
+      puts '⚡ Press Ctrl+C to stop'
+      puts
+
+      rack_app = self
+
+      Async do |task|
+        # Create endpoint
+        endpoint = Async::HTTP::Endpoint.parse(
+          "http://#{host}:#{port}",
+          reuse_address: true
+        )
+
+        # Wrap Rack app for async-http
+        app = Protocol::Rack::Adapter.new(rack_app)
+
+        # Create server
+        server = Async::HTTP::Server.new(app, endpoint)
+
+        # Handle graceful shutdown
+        Signal.trap('INT') do
+          puts "\n👋 Shutting down gracefully..."
+          task.stop
+        end
+
+        Signal.trap('TERM') do
+          puts "\n👋 Shutting down gracefully..."
+          task.stop
+        end
+
+        # Run the server
+        server.run
+      end
+    end
+
     private
 
     def add_route(verb, path, contract:, &blk)
@@ -59,7 +94,7 @@ module FunApi
         if contract
           result = contract.call(input)
           unless result.success?
-            return [
+            next [
               422,
               { 'content-type' => 'application/json' },
               [JSON.dump(errors: result.errors.to_h)]

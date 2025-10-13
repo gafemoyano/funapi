@@ -27,7 +27,7 @@ class TestFunApi < Minitest::Test
   end
 
   def build_app
-    FunApi::Application.new do |app|
+    FunApi::App.new do |app|
       # GET /hello?name=Ada
       app.get '/hello' do |input, _req|
         [{ msg: "Hello, #{input[:query]['name'] || 'world'}" }, 200]

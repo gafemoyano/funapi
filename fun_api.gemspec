@@ -36,6 +36,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'rack', '>= 3.0.0', '< 4'
   # spec.add_dependency "rack", "~> 3.0"
   spec.add_dependency 'async', '>= 2.8'
+  spec.add_dependency 'dry-validation', '>= 1.11.1'
   spec.add_dependency 'falcon', '>= 0.44'
 
   # For more information and examples about making a new gem, check out our
