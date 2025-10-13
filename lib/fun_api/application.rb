@@ -5,9 +5,12 @@ require 'async/http/server'
 require 'async/http/endpoint'
 require 'protocol/rack'
 require 'fun_api/router'
+require 'fun_api/async'
 
 module FunApi
   class App
+    include FunApi::AsyncHelpers
+
     def initialize
       @router = Router.new
       @middleware_stack = []
@@ -82,19 +85,29 @@ module FunApi
     private
 
     def add_route(verb, path, contract:, &blk)
-      @router.add(verb, path) do |req, path_params|
+      @router.add(verb, path) { |req, path_params| handle_async_route(req, path_params, contract, &blk) }
+    end
+
+    def handle_async_route(req, path_params, contract, &blk)
+      # Falcon already provides async context, just set up fiber-local storage
+      # Use current fiber as the task - this works because Falcon uses fibers
+      current_task = Fiber.current
+      Fiber[:async_task] = current_task
+
+      begin
         # Build the unified input object
         input = {
           path: path_params,
           query: req.params,
-          body: parse_body(req) # you might only parse JSON for POST/PUT
+          body: parse_body(req)
         }
 
         # Run validation if a contract is provided
         if contract
           result = contract.call(input)
           unless result.success?
-            next [
+            # Return validation error response
+            return [
               422,
               { 'content-type' => 'application/json' },
               [JSON.dump(errors: result.errors.to_h)]
@@ -103,7 +116,7 @@ module FunApi
           input = result.to_h
         end
 
-        # Call user handler
+        # Call user handler (now in async context)
         payload, status = blk.call(input, req)
 
         # Return JSON response
@@ -112,6 +125,9 @@ module FunApi
           { 'content-type' => 'application/json' },
           [JSON.dump(payload)]
         ]
+      ensure
+        # Clean up fiber-local storage
+        Fiber[:async_task] = nil
       end
     end
 
