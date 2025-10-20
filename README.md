@@ -1,99 +1,347 @@
 # FunApi
 
-TODO: Delete this and the text below, and describe your gem
+A minimal, async-first Ruby web framework inspired by FastAPI. Built on top of Falcon and dry-schema, FunApi provides a simple, performant way to build web APIs in Ruby with a focus on developer experience.
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/fun_api`. To experiment with that code, run `bin/console` for an interactive prompt.
+## Philosophy
+
+FunApi aims to bring FastAPI's excellent developer experience to Ruby by providing:
+
+- **Async-first**: Built on Ruby's Async library and Falcon server for high-performance concurrent operations
+- **Simple validation**: Using dry-schema for straightforward request validation
+- **Minimal magic**: Clear, explicit APIs without heavy DSLs
+- **Easy to start**: Get an API up and running in minutes
+- **Auto-documentation**: Automatic OpenAPI/Swagger documentation generation
 
 ## Installation
 
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
+Add this line to your application's Gemfile:
 
-Install the gem and add to the application's Gemfile by executing:
-
-```bash
-bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+```ruby
+gem 'fun_api'
 ```
 
-If bundler is not being used to manage dependencies, install the gem by executing:
+And then execute:
 
 ```bash
-gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+bundle install
 ```
 
-## Usage
+## Quick Start
 
-TODO: Write usage instructions here
+```ruby
+require 'fun_api'
+require 'fun_api/server/falcon'
+
+UserSchema = FunApi::Schema.define do
+  required(:name).filled(:string)
+  required(:email).filled(:string)
+end
+
+app = FunApi::App.new(
+  title: "My API",
+  version: "1.0.0",
+  description: "A simple API example"
+) do |api|
+  api.get '/hello' do |input, req, task|
+    [{ message: 'Hello, World!' }, 200]
+  end
+  
+  api.post '/users', body: UserSchema do |input, req, task|
+    user = input[:body]
+    [{ created: user }, 201]
+  end
+end
+
+FunApi::Server::Falcon.start(app, port: 9292)
+```
+
+Visit http://localhost:9292/docs to see your interactive API documentation!
+
+## Core Features
+
+### 1. Async-First Request Handling
+
+All route handlers receive the current `Async::Task` as the third parameter, enabling true concurrent execution within your routes:
+
+```ruby
+api.get '/dashboard/:id' do |input, req, task|
+  user_id = input[:path]['id']
+  
+  user_task = task.async { fetch_user_data(user_id) }
+  posts_task = task.async { fetch_user_posts(user_id) }
+  stats_task = task.async { fetch_user_stats(user_id) }
+  
+  data = {
+    user: user_task.wait,
+    posts: posts_task.wait,
+    stats: stats_task.wait
+  }
+  
+  [{ dashboard: data }, 200]
+end
+```
+
+### 2. Request Validation
+
+FastAPI-style request validation using dry-schema:
+
+```ruby
+UserCreateSchema = FunApi::Schema.define do
+  required(:name).filled(:string)
+  required(:email).filled(:string)
+  required(:password).filled(:string)
+  optional(:age).filled(:integer)
+end
+
+QuerySchema = FunApi::Schema.define do
+  optional(:limit).filled(:integer)
+  optional(:offset).filled(:integer)
+end
+
+app = FunApi::App.new do |api|
+  api.get '/hello', query: QuerySchema do |input, req, task|
+    name = input[:query][:name] || 'World'
+    [{ msg: "Hello, #{name}!" }, 200]
+  end
+
+  api.post '/users', body: UserCreateSchema do |input, req, task|
+    user = input[:body]
+    [{ created: user }, 201]
+  end
+  
+  api.post '/users/batch', body: [UserCreateSchema] do |input, req, task|
+    users = input[:body].map { |u| create_user(u) }
+    [users, 201]
+  end
+end
+```
+
+### 3. Response Schema Validation & Filtering
+
+Automatically validate and filter response data, similar to FastAPI's `response_model`:
+
+```ruby
+UserOutputSchema = FunApi::Schema.define do
+  required(:id).filled(:integer)
+  required(:name).filled(:string)
+  required(:email).filled(:string)
+  optional(:age).filled(:integer)
+end
+
+app = FunApi::App.new do |api|
+  api.post '/users', 
+    body: UserCreateSchema,
+    response_schema: UserOutputSchema do |input, req, task|
+      
+    user = {
+      id: 1,
+      name: input[:body][:name],
+      email: input[:body][:email],
+      password: input[:body][:password],
+      age: input[:body][:age]
+    }
+    
+    [user, 201]
+  end
+  
+  api.get '/users',
+    response_schema: [UserOutputSchema] do |input, req, task|
+    users = fetch_all_users()
+    [users, 200]
+  end
+end
+```
+
+### 4. Automatic OpenAPI Documentation
+
+FunApi automatically generates OpenAPI 3.0 specifications from your route definitions and schemas:
+
+```ruby
+app = FunApi::App.new(
+  title: "User Management API",
+  version: "1.0.0",
+  description: "A comprehensive user management system"
+) do |api|
+  api.get '/users', query: QuerySchema, response_schema: [UserOutputSchema] do |input, req, task|
+    [fetch_users(input[:query]), 200]
+  end
+  
+  api.post '/users', body: UserCreateSchema, response_schema: UserOutputSchema do |input, req, task|
+    [create_user(input[:body]), 201]
+  end
+end
+
+FunApi::Server::Falcon.start(app, port: 9292)
+```
+
+Once running, you can access:
+- **Interactive docs**: http://localhost:9292/docs (Swagger UI)
+- **OpenAPI spec**: http://localhost:9292/openapi.json
+
+The documentation is automatically generated from:
+- Route paths and HTTP methods
+- Path parameters (`:id` → `{id}`)
+- Query parameter schemas
+- Request body schemas
+- Response schemas
+- Schema names (from constant names)
+
+### 5. FastAPI-Style Error Handling
+
+Validation errors return detailed, structured responses:
+
+```json
+{
+  "detail": [
+    {
+      "loc": ["body", "email"],
+      "msg": "is missing",
+      "type": "value_error"
+    }
+  ]
+}
+```
+
+Custom exceptions with proper HTTP status codes:
+
+```ruby
+raise FunApi::HTTPException.new(status_code: 404, detail: "User not found")
+raise FunApi::ValidationError.new(errors: schema_errors)
+```
+
+### 6. Input Structure
+
+All route handlers receive a unified `input` hash:
+
+```ruby
+{
+  path: { id: "123" },
+  query: { name: "John" },
+  body: { email: "..." }
+}
+```
+
+## Complete Example
+
+```ruby
+require 'fun_api'
+require 'fun_api/server/falcon'
+
+UserCreateSchema = FunApi::Schema.define do
+  required(:name).filled(:string)
+  required(:email).filled(:string)
+  required(:password).filled(:string)
+  optional(:age).filled(:integer)
+end
+
+UserOutputSchema = FunApi::Schema.define do
+  required(:id).filled(:integer)
+  required(:name).filled(:string)
+  required(:email).filled(:string)
+  optional(:age).filled(:integer)
+end
+
+QuerySchema = FunApi::Schema.define do
+  optional(:limit).filled(:integer)
+  optional(:offset).filled(:integer)
+end
+
+app = FunApi::App.new(
+  title: "User Management API",
+  version: "1.0.0",
+  description: "A simple user management API"
+) do |api|
+  api.get '/users', query: QuerySchema, response_schema: [UserOutputSchema] do |input, req, task|
+    users = [
+      { id: 1, name: 'John Doe', email: 'john@example.com', age: 30 },
+      { id: 2, name: 'Jane Smith', email: 'jane@example.com' }
+    ]
+    [users, 200]
+  end
+
+  api.get '/users/:id', response_schema: UserOutputSchema do |input, req, task|
+    user_id = input[:path]['id']
+    user = { id: user_id.to_i, name: 'John Doe', email: 'john@example.com', age: 30 }
+    [user, 200]
+  end
+
+  api.post '/users', body: UserCreateSchema, response_schema: UserOutputSchema do |input, req, task|
+    user = input[:body].merge(id: rand(1000))
+    [user, 201]
+  end
+  
+  api.get '/dashboard/:id' do |input, req, task|
+    user_id = input[:path]['id']
+    
+    user_task = task.async { fetch_user(user_id) }
+    posts_task = task.async { fetch_posts(user_id) }
+    stats_task = task.async { fetch_stats(user_id) }
+    
+    data = {
+      user: user_task.wait,
+      posts: posts_task.wait,
+      stats: stats_task.wait
+    }
+    
+    [{ dashboard: data }, 200]
+  end
+end
+
+FunApi::Server::Falcon.start(app, port: 9292)
+```
+
+## Architecture
+
+- **Router**: Simple pattern-based routing with path parameter extraction
+- **Async Helpers**: Wrapper around Ruby's Async library for concurrent operations
+- **Schema**: Thin wrapper around dry-schema for validation
+- **Exceptions**: FastAPI-inspired exception classes with proper HTTP responses
+- **Server**: Falcon-based async HTTP server
+- **OpenAPI**: Automatic OpenAPI 3.0 specification generation from routes and schemas
+
+## Dependencies
+
+- **rack** (>= 3.0.0): Web server interface
+- **async** (>= 2.8): Async/await and concurrency primitives
+- **dry-schema** (>= 1.13): Schema validation
+- **falcon** (>= 0.44): High-performance async HTTP server
+
+## Design Goals
+
+1. **Performance**: Leverage Ruby's async capabilities for concurrent operations
+2. **Simplicity**: Minimal API surface, easy to learn
+3. **Explicitness**: No hidden magic, clear separation of concerns
+4. **Type Safety**: Validation at the edges using dry-schema
+5. **FastAPI-inspired**: Bring the best ideas from Python's FastAPI to Ruby
+
+## Current Status
+
+Early development. Core features implemented:
+- ✅ Async-first request handling with Async::Task
+- ✅ Route definition with path params
+- ✅ Request validation (body/query) with array support
+- ✅ Response schema validation and filtering
+- ✅ FastAPI-style error responses
+- ✅ Falcon server integration
+- ✅ **OpenAPI/Swagger documentation generation**
+
+## Future Enhancements
+
+- Path parameter type validation
+- Middleware support
+- Response schema options (exclude_unset, include, exclude)
+- Dependency injection system
+- WebSocket support
+- Content negotiation (JSON, XML, etc.)
 
 ## Development
 
 After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake test` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
 
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
-
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/fun_api. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [code of conduct](https://github.com/[USERNAME]/fun_api/blob/master/CODE_OF_CONDUCT.md).
+Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/fun_api.
 
 ## License
 
 The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
-
-## Code of Conduct
-
-Everyone interacting in the FunApi project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://github.com/[USERNAME]/fun_api/blob/master/CODE_OF_CONDUCT.md).
-
-
-```ruby
-require 'async/http/internet'
-
-App = FunAPI::App.new do |app|
-  app.get "/posts" do |input, req|
-    # We're already in a fiber (Falcon manages this)
-    # Do concurrent requests
-    posts = Async do |task|
-      users_task = task.async { fetch_users }
-      comments_task = task.async { fetch_comments }
-
-      {
-        users: users_task.wait,
-        comments: comments_task.wait
-      }
-    end.wait
-
-    [posts, 200]
-  end
-end
-
-def fetch_users
-  internet = Async::HTTP::Internet.new
-  response = internet.get('https://api.example.com/users')
-  JSON.parse(response.read)
-ensure
-  internet&.close
-end
-
-# Define route modules
-UsersRoutes = ->(app) {
-  app.get "/users" do |input, req|
-    [User.all, 200]
-  end
-
-  app.get "/users/:id" do |input, req|
-    [User.find(input[:path]["id"]), 200]
-  end
-}
-
-PostsRoutes = ->(app) {
-  app.get "/posts" do |input, req|
-    [Post.all, 200]
-  end
-}
-
-# Compose app
-App = FunAPI::App.new do |app|
-  app.use FunAPI::Middleware::Logger
-
-  UsersRoutes.call(app)
-  PostsRoutes.call(app)
-end
-```

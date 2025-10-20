@@ -76,32 +76,82 @@ FastAPI-style request validation using dry-schema:
 UserCreateSchema = FunApi::Schema.define do
   required(:name).filled(:string)
   required(:email).filled(:string)
+  required(:password).filled(:string)
   optional(:age).filled(:integer)
 end
 
 # Apply validation to routes
 app = FunApi::App.new do |api|
   # Query param validation (GET/DELETE)
-  api.get '/hello', query: QuerySchema do |input, req|
+  api.get '/hello', query: QuerySchema do |input, req, task|
     name = input[:query][:name] || 'World'
     [{ msg: "Hello, #{name}!" }, 200]
   end
 
   # Body validation (POST/PUT/PATCH)
-  api.post '/users', body: UserCreateSchema do |input, req|
+  api.post '/users', body: UserCreateSchema do |input, req, task|
     user = input[:body]
     [{ created: user }, 201]
   end
   
+  # Array body validation
+  api.post '/users/batch', body: [UserCreateSchema] do |input, req, task|
+    users = input[:body].map { |u| create_user(u) }
+    [users, 201]
+  end
+  
   # Path params are automatically extracted (no validation needed)
-  api.get '/users/:id' do |input, req|
+  api.get '/users/:id' do |input, req, task|
     user_id = input[:path]['id']  # Always a string
     [{ user: fetch_user(user_id) }, 200]
   end
 end
 ```
 
-### 3. FastAPI-Style Error Handling
+### 3. Response Schema Validation & Filtering
+
+Automatically validate and filter response data, similar to FastAPI's `response_model`:
+
+```ruby
+# Define output schema (without sensitive fields)
+UserOutputSchema = FunApi::Schema.define do
+  required(:id).filled(:integer)
+  required(:name).filled(:string)
+  required(:email).filled(:string)
+  optional(:age).filled(:integer)
+  # Note: password NOT included
+end
+
+app = FunApi::App.new do |api|
+  # Response schema filters out password field
+  api.post '/users', 
+    body: UserCreateSchema,
+    response_schema: UserOutputSchema do |input, req, task|
+      
+    # Handler returns full user with password
+    user = {
+      id: 1,
+      name: input[:body][:name],
+      email: input[:body][:email],
+      password: input[:body][:password],  # This will be filtered!
+      age: input[:body][:age]
+    }
+    
+    [user, 201]
+    # Client receives: { "id": 1, "name": "...", "email": "...", "age": ... }
+    # Password automatically removed by response_schema!
+  end
+  
+  # Array responses also supported
+  api.get '/users',
+    response_schema: [UserOutputSchema] do |input, req, task|
+    users = fetch_all_users()  # Returns users with passwords
+    [users, 200]  # All passwords filtered from response
+  end
+end
+```
+
+### 4. FastAPI-Style Error Handling
 
 Validation errors return detailed, structured responses:
 
@@ -124,7 +174,7 @@ raise FunApi::HTTPException.new(status_code: 404, detail: "User not found")
 raise FunApi::ValidationError.new(errors: schema_errors)
 ```
 
-### 4. Input Structure
+### 5. Input Structure
 
 All route handlers receive a unified `input` hash:
 
@@ -210,10 +260,10 @@ FunApi::Server::Falcon.start(app)
 ## Current Status
 
 Early development. Core features implemented:
-- ✅ Async-first request handling
+- ✅ Async-first request handling with Async::Task
 - ✅ Route definition with path params
-- ✅ Request validation (body/query)
-- ✅ Concurrent execution helpers
+- ✅ Request validation (body/query) with array support
+- ✅ Response schema validation and filtering
 - ✅ FastAPI-style error responses
 - ✅ Falcon server integration
 
@@ -222,6 +272,7 @@ Early development. Core features implemented:
 - Path parameter type validation
 - Middleware support
 - OpenAPI/Swagger documentation generation
+- Response schema options (exclude_unset, include, exclude)
 - Dependency injection system
 - WebSocket support
-- Response models/serialization
+- Content negotiation (JSON, XML, etc.)

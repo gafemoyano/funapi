@@ -1,16 +1,16 @@
 # frozen_string_literal: true
 
 module FunApi
-  # Map routes to handlers
   class Router
-    Route = Struct.new(:verb, :pattern, :keys, :handler)
+    Route = Struct.new(:verb, :pattern, :keys, :handler, :metadata)
 
     def initialize
       @routes = []
     end
 
-    def add(verb, path, &handler)
-      # Convert /users/:id -> regex + keys
+    attr_reader :routes
+
+    def add(verb, path, metadata: {}, &handler)
       keys = []
       regex = path.split('/').map do |seg|
         if seg.start_with?(':')
@@ -20,7 +20,9 @@ module FunApi
           Regexp.escape(seg)
         end
       end.join('/')
-      @routes << Route.new(verb.upcase, /\A#{regex}\z/, keys, handler)
+
+      route_metadata = metadata.merge(path_template: path)
+      @routes << Route.new(verb.upcase, /\A#{regex}\z/, keys, handler, route_metadata)
     end
 
     def call(env)

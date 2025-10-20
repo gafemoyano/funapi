@@ -4,40 +4,48 @@ require 'async'
 require 'async/http/server'
 require 'async/http/endpoint'
 require 'protocol/rack'
-require 'fun_api/router'
-require 'fun_api/async'
-require 'fun_api/exceptions'
-require 'fun_api/schema'
+require_relative 'router'
+require_relative 'async'
+require_relative 'exceptions'
+require_relative 'schema'
+require_relative 'openapi/spec_generator'
 
 module FunApi
   class App
-    include FunApi::AsyncHelpers
+    attr_reader :openapi_config
 
-    def initialize
+    def initialize(title: 'FunApi Application', version: '1.0.0', description: '')
       @router = Router.new
       @middleware_stack = []
+      @openapi_config = {
+        title: title,
+        version: version,
+        description: description
+      }
 
       yield self if block_given?
+
+      register_openapi_routes
     end
 
-    def get(path, query: nil, &blk)
-      add_route('GET', path, query: query, &blk)
+    def get(path, query: nil, response_schema: nil, &blk)
+      add_route('GET', path, query: query, response_schema: response_schema, &blk)
     end
 
-    def post(path, body: nil, query: nil, &blk)
-      add_route('POST', path, body: body, query: query, &blk)
+    def post(path, body: nil, query: nil, response_schema: nil, &blk)
+      add_route('POST', path, body: body, query: query, response_schema: response_schema, &blk)
     end
 
-    def put(path, body: nil, query: nil, &blk)
-      add_route('PUT', path, body: body, query: query, &blk)
+    def put(path, body: nil, query: nil, response_schema: nil, &blk)
+      add_route('PUT', path, body: body, query: query, response_schema: response_schema, &blk)
     end
 
-    def patch(path, body: nil, query: nil, &blk)
-      add_route('PATCH', path, body: body, query: query, &blk)
+    def patch(path, body: nil, query: nil, response_schema: nil, &blk)
+      add_route('PATCH', path, body: body, query: query, response_schema: response_schema, &blk)
     end
 
-    def delete(path, query: nil, &blk)
-      add_route('DELETE', path, query: query, &blk)
+    def delete(path, query: nil, response_schema: nil, &blk)
+      add_route('DELETE', path, query: query, response_schema: response_schema, &blk)
     end
 
     # Rack interface
@@ -86,11 +94,19 @@ module FunApi
 
     private
 
-    def add_route(verb, path, body: nil, query: nil, &blk)
-      @router.add(verb, path) { |req, path_params| handle_async_route(req, path_params, body, query, &blk) }
+    def add_route(verb, path, body: nil, query: nil, response_schema: nil, &blk)
+      metadata = {
+        body_schema: body,
+        query_schema: query,
+        response_schema: response_schema
+      }
+
+      @router.add(verb, path, metadata: metadata) do |req, path_params|
+        handle_async_route(req, path_params, body, query, response_schema, &blk)
+      end
     end
 
-    def handle_async_route(req, path_params, body_schema, query_schema, &blk)
+    def handle_async_route(req, path_params, body_schema, query_schema, response_schema, &blk)
       current_task = Async::Task.current
       Fiber[:async_task] = current_task
 
@@ -106,6 +122,10 @@ module FunApi
         input[:body] = Schema.validate(body_schema, input[:body], location: 'body') if body_schema
 
         payload, status = blk.call(input, req, current_task)
+
+        payload = normalize_payload(payload)
+
+        payload = Schema.validate_response(response_schema, payload) if response_schema
 
         [
           status || 200,
@@ -222,6 +242,90 @@ module FunApi
       else
         { 'content-type' => 'text/plain' }
       end
+    end
+
+    def normalize_payload(payload)
+      return payload unless payload
+
+      if payload.is_a?(Array)
+        payload.map { |item| normalize_single_payload(item) }
+      else
+        normalize_single_payload(payload)
+      end
+    end
+
+    def normalize_single_payload(item)
+      if item.respond_to?(:to_h) && item.class.name&.include?('Dry::Schema::Result')
+        item.to_h
+      else
+        item
+      end
+    end
+
+    def register_openapi_routes
+      @router.add('GET', '/openapi.json', metadata: { internal: true }) do |_req, _path_params|
+        spec = generate_openapi_spec
+        [
+          200,
+          { 'content-type' => 'application/json' },
+          [JSON.dump(spec)]
+        ]
+      end
+
+      @router.add('GET', '/docs', metadata: { internal: true }) do |_req, _path_params|
+        html = swagger_ui_html
+        [
+          200,
+          { 'content-type' => 'text/html' },
+          [html]
+        ]
+      end
+    end
+
+    def generate_openapi_spec
+      generator = OpenAPI::SpecGenerator.new(@router.routes, info: @openapi_config)
+      generator.generate
+    end
+
+    def swagger_ui_html
+      <<~HTML
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <base href="/" />
+          <title>#{@openapi_config[:title]} - Swagger UI</title>
+          <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+          <style>
+            html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
+            *, *:before, *:after { box-sizing: inherit; }
+            body { margin:0; padding:0; }
+          </style>
+        </head>
+        <body>
+          <div id="swagger-ui"></div>
+          <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+          <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+          <script>
+            window.onload = function() {
+              window.ui = SwaggerUIBundle({
+                url: "/openapi.json",
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                  SwaggerUIBundle.presets.apis,
+                  SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                  SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout"
+              });
+            };
+          </script>
+        </body>
+        </html>
+      HTML
     end
   end
 end

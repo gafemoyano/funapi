@@ -21,12 +21,20 @@ def fetch_user_stats(_user_id)
   { posts_count: 2, followers: 42, following: 17 }
 end
 
-QuerySchema = Dry::Schema.Params do
+QuerySchema = FunApi::Schema.define do
   optional(:name).filled(:string)
   optional(:limit).filled(:integer)
 end
 
-UserCreateSchema = Dry::Schema.Params do
+UserCreateSchema = FunApi::Schema.define do
+  required(:name).filled(:string)
+  required(:email).filled(:string)
+  required(:password).filled(:string)
+  optional(:age).filled(:integer)
+end
+
+UserOutputSchema = FunApi::Schema.define do
+  required(:id).filled(:integer)
   required(:name).filled(:string)
   required(:email).filled(:string)
   optional(:age).filled(:integer)
@@ -44,9 +52,9 @@ app = FunApi::App.new do |api|
     [{ user: user_data }, 200]
   end
 
-  api.post '/users', body: UserCreateSchema do |input, _req|
-    user_data = input[:body]
-    [{ created: user_data.merge(id: rand(1000)) }, 201]
+  api.post '/users', body: UserCreateSchema, response_schema: UserOutputSchema do |input, _req, _task|
+    user_data = input[:body].merge(id: rand(1000))
+    [user_data, 201]
   end
 
   api.get '/dashboard/:id' do |input, _req, task|
@@ -72,11 +80,11 @@ app = FunApi::App.new do |api|
     [{ dashboard: data }, 200]
   end
 
-  api.get '/slow/:id' do |input, _req|
+  api.get '/slow/:id' do |input, _req, task|
     user_id = input[:path]['id']
 
     begin
-      data = timeout(0.5) do
+      data = task.with_timeout(0.5) do
         fetch_user_stats(user_id)
       end
       [{ data: data, message: 'Completed within timeout' }, 200]
@@ -84,37 +92,16 @@ app = FunApi::App.new do |api|
       [{ error: 'Request timed out' }, 408]
     end
   end
-
-  api.get '/advanced/:id' do |input, _req|
-    user_id = input[:path]['id']
-
-    results = concurrent_block do |task|
-      user_task = task.async { fetch_user_data(user_id) }
-      posts_task = task.async { fetch_user_posts(user_id) }
-
-      user = user_task.wait
-
-      stats_task = task.async { fetch_user_stats(user[:id]) }
-
-      {
-        user: user,
-        posts: posts_task.wait,
-        stats: stats_task.wait
-      }
-    end
-
-    [{ advanced: results }, 200]
-  end
 end
 
 puts '🚀 Starting FunApi server with async capabilities...'
 puts '📍 Try these endpoints:'
 puts '   curl http://localhost:3000/hello?name=Ruby'
 puts '   curl http://localhost:3000/users/123'
-puts '   curl -X POST http://localhost:3000/users -H "Content-Type: application/json" -d \'{"name":"John","email":"john@example.com"}\''
+puts '   curl -X POST http://localhost:3000/users -H "Content-Type: application/json" -d \'{"name":"John","email":"john@example.com","password":"secret123"}\''
+puts '   # Note: Password will be filtered from response by response_schema'
 puts '   curl http://localhost:3000/dashboard/123  # Concurrent execution!'
 puts '   curl http://localhost:3000/slow/123       # Timeout example'
-puts '   curl http://localhost:3000/advanced/123   # Advanced async'
 puts
 
 FunApi::Server::Falcon.start(app)
