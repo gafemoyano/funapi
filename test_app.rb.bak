@@ -3,13 +3,14 @@
 require 'fun_api'
 require 'fun_api/server/falcon'
 
+# Simulate async data fetching
 def fetch_user_data(user_id)
-  sleep(0.4)
+  sleep(0.1) # Simulate network delay
   { id: user_id, name: "User #{user_id}", email: "user#{user_id}@example.com" }
 end
 
 def fetch_user_posts(user_id)
-  sleep(0.2)
+  sleep(0.15) # Simulate network delay
   [
     { id: 1, title: "Post 1 by User #{user_id}", content: 'Content 1' },
     { id: 2, title: "Post 2 by User #{user_id}", content: 'Content 2' }
@@ -17,67 +18,47 @@ def fetch_user_posts(user_id)
 end
 
 def fetch_user_stats(_user_id)
-  sleep(0.3)
+  sleep(0.2) # Simulate network delay
   { posts_count: 2, followers: 42, following: 17 }
 end
 
-QuerySchema = Dry::Schema.Params do
-  optional(:name).filled(:string)
-  optional(:limit).filled(:integer)
-end
-
-UserCreateSchema = Dry::Schema.Params do
-  required(:name).filled(:string)
-  required(:email).filled(:string)
-  optional(:age).filled(:integer)
-end
-
+# Build the application
 app = FunApi::App.new do |api|
-  api.get '/hello', query: QuerySchema do |input, _req|
-    name = input[:query][:name] || 'World'
+  # Simple async route
+  api.get '/hello' do |input, _req|
+    name = input[:query]['name'] || 'World'
     [{ msg: "Hello from FunApi, #{name}!" }, 200]
   end
 
+  # Route with path params
   api.get '/users/:id' do |input, _req|
     user_id = input[:path]['id']
     user_data = fetch_user_data(user_id)
     [{ user: user_data }, 200]
   end
 
-  api.post '/users', body: UserCreateSchema do |input, _req|
-    user_data = input[:body]
-    [{ created: user_data.merge(id: rand(1000)) }, 201]
-  end
-
-  api.get '/dashboard/:id' do |input, _req, task|
-    timer_start = Time.now
-
+  # Concurrent execution example
+  api.get '/dashboard/:id' do |input, _req|
     user_id = input[:path]['id']
 
-    user_task = task.async { fetch_user_data(user_id) }
-    post_task = task.async { fetch_user_posts(user_id) }
-    stats_task = task.async { fetch_user_stats(user_id) }
-
-    timer_duration = Time.now - timer_start
-    puts "⏱️  Launched async tasks in #{(timer_duration * 1000).round(2)} ms"
-    data = {
-      user: user_task.wait,
-      posts: post_task.wait,
-      stats: stats_task.wait
-    }
-
-    timer_duration = Time.now - timer_start
-    puts "⏱️  Completed all tasks in #{(timer_duration * 1000).round(2)} ms"
+    # This will execute all three operations concurrently!
+    data = concurrent(
+      user: -> { fetch_user_data(user_id) },
+      posts: -> { fetch_user_posts(user_id) },
+      stats: -> { fetch_user_stats(user_id) }
+    )
 
     [{ dashboard: data }, 200]
   end
 
+  # Timeout example
   api.get '/slow/:id' do |input, _req|
     user_id = input[:path]['id']
 
     begin
+      # This will timeout after 0.5 seconds
       data = timeout(0.5) do
-        fetch_user_stats(user_id)
+        fetch_user_stats(user_id) # This takes 0.2s, so it should succeed
       end
       [{ data: data, message: 'Completed within timeout' }, 200]
     rescue ::Async::TimeoutError
@@ -85,15 +66,19 @@ app = FunApi::App.new do |api|
     end
   end
 
+  # Advanced concurrent example with block syntax
   api.get '/advanced/:id' do |input, _req|
     user_id = input[:path]['id']
 
     results = concurrent_block do |task|
+      # Start multiple operations
       user_task = task.async { fetch_user_data(user_id) }
       posts_task = task.async { fetch_user_posts(user_id) }
 
+      # Get user data first
       user = user_task.wait
 
+      # Then start stats based on user data
       stats_task = task.async { fetch_user_stats(user[:id]) }
 
       {
@@ -111,7 +96,6 @@ puts '🚀 Starting FunApi server with async capabilities...'
 puts '📍 Try these endpoints:'
 puts '   curl http://localhost:3000/hello?name=Ruby'
 puts '   curl http://localhost:3000/users/123'
-puts '   curl -X POST http://localhost:3000/users -H "Content-Type: application/json" -d \'{"name":"John","email":"john@example.com"}\''
 puts '   curl http://localhost:3000/dashboard/123  # Concurrent execution!'
 puts '   curl http://localhost:3000/slow/123       # Timeout example'
 puts '   curl http://localhost:3000/advanced/123   # Advanced async'

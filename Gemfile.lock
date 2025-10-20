@@ -3,7 +3,7 @@ PATH
   specs:
     fun_api (0.1.0)
       async (>= 2.8)
-      dry-validation (>= 1.11.1)
+      dry-schema (>= 1.13)
       falcon (>= 0.44)
       rack (>= 3.0.0, < 4)
 
@@ -78,12 +78,6 @@ GEM
       dry-core (~> 1.0)
       dry-inflector (~> 1.0)
       dry-logic (~> 1.4)
-      zeitwerk (~> 2.6)
-    dry-validation (1.11.1)
-      concurrent-ruby (~> 1.0)
-      dry-core (~> 1.1)
-      dry-initializer (~> 3.2)
-      dry-schema (~> 1.14)
       zeitwerk (~> 2.6)
     erb (5.1.1)
     falcon (0.52.3)

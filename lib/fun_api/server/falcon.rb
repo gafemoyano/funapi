@@ -9,20 +9,24 @@ module FunApi
     class Falcon
       def self.start(app, host: '0.0.0.0', port: 3000)
         # Use protocol-rack to properly bridge Rack and Falcon
-        falcon_app = Protocol::Rack::Adapter.new(app)
-        endpoint = ::Async::HTTP::Endpoint.parse("http://#{host}:#{port}")
-        server = ::Falcon::Server.new(falcon_app, endpoint)
+        Async do |task|
+          falcon_app = Protocol::Rack::Adapter.new(app)
+          endpoint = ::Async::HTTP::Endpoint.parse("http://#{host}:#{port}").with(protocols: Async::HTTP::Protocol::HTTP2)
 
-        puts "🚀 Falcon listening on #{host}:#{port}"
-        puts "Try: curl http://#{host}:#{port}/hello"
-        puts 'Press Ctrl+C to stop'
+          server = ::Falcon::Server.new(falcon_app, endpoint)
 
-        trap(:INT) do
-          puts "\nShutting down..."
-          exit
+          puts "🚀 Falcon listening on #{host}:#{port}"
+          puts "Try: curl http://#{host}:#{port}/hello"
+          puts 'Press Ctrl+C to stop'
+
+          trap(:INT) do
+            puts "\nShutting down..."
+            task.stop
+            exit
+          end
+
+          server.run
         end
-
-        server.run
       end
     end
   end

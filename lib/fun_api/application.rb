@@ -6,6 +6,8 @@ require 'async/http/endpoint'
 require 'protocol/rack'
 require 'fun_api/router'
 require 'fun_api/async'
+require 'fun_api/exceptions'
+require 'fun_api/schema'
 
 module FunApi
   class App
@@ -18,24 +20,24 @@ module FunApi
       yield self if block_given?
     end
 
-    # GET
-    def get(path, contract: nil, &blk)
-      add_route('GET', path, contract: contract, &blk)
+    def get(path, query: nil, &blk)
+      add_route('GET', path, query: query, &blk)
     end
 
-    # POST
-    def post(path, contract: nil, &blk)
-      add_route('POST', path, contract: contract, &blk)
+    def post(path, body: nil, query: nil, &blk)
+      add_route('POST', path, body: body, query: query, &blk)
     end
 
-    # PUT (or PATCH – same idea)
-    def put(path, contract: nil, &blk)
-      add_route('PUT', path, contract: contract, &blk)
+    def put(path, body: nil, query: nil, &blk)
+      add_route('PUT', path, body: body, query: query, &blk)
     end
 
-    # DELETE
-    def delete(path, contract: nil, &blk)
-      add_route('DELETE', path, contract: contract, &blk)
+    def patch(path, body: nil, query: nil, &blk)
+      add_route('PATCH', path, body: body, query: query, &blk)
+    end
+
+    def delete(path, query: nil, &blk)
+      add_route('DELETE', path, query: query, &blk)
     end
 
     # Rack interface
@@ -45,88 +47,76 @@ module FunApi
     end
 
     # Run the app with Falcon
-    def run!(host: 'localhost', port: 9292, **options)
-      puts "🚀 FunAPI server starting on http://#{host}:#{port}"
-      puts "📚 Environment: #{options[:environment] || 'development'}"
-      puts '⚡ Press Ctrl+C to stop'
-      puts
+    # def run!(host: 'localhost', port: 9292, **options)
+    #   puts "🚀 FunAPI server starting on http://#{host}:#{port}"
+    #   puts "📚 Environment: #{options[:environment] || 'development'}"
+    #   puts '⚡ Press Ctrl+C to stop'
+    #   puts
 
-      rack_app = self
+    #   rack_app = self
 
-      Async do |task|
-        # Create endpoint
-        endpoint = Async::HTTP::Endpoint.parse(
-          "http://#{host}:#{port}",
-          reuse_address: true
-        )
+    #   Async do |task|
+    #     # Create endpoint
+    #     endpoint = Async::HTTP::Endpoint.parse(
+    #       "http://#{host}:#{port}",
+    #       reuse_address: true
+    #     )
 
-        # Wrap Rack app for async-http
-        app = Protocol::Rack::Adapter.new(rack_app)
+    #     # Wrap Rack app for async-http
+    #     app = Protocol::Rack::Adapter.new(rack_app)
 
-        # Create server
-        server = Async::HTTP::Server.new(app, endpoint)
+    #     # Create server
+    #     server = Async::HTTP::Server.new(app, endpoint)
 
-        # Handle graceful shutdown
-        Signal.trap('INT') do
-          puts "\n👋 Shutting down gracefully..."
-          task.stop
-        end
+    #     # Handle graceful shutdown
+    #     Signal.trap('INT') do
+    #       puts "\n👋 Shutting down gracefully..."
+    #       task.stop
+    #     end
 
-        Signal.trap('TERM') do
-          puts "\n👋 Shutting down gracefully..."
-          task.stop
-        end
+    #     Signal.trap('TERM') do
+    #       puts "\n👋 Shutting down gracefully..."
+    #       task.stop
+    #     end
 
-        # Run the server
-        server.run
-      end
-    end
+    #     # Run the server
+    #     server.run
+    #   end
+    # end
 
     private
 
-    def add_route(verb, path, contract:, &blk)
-      @router.add(verb, path) { |req, path_params| handle_async_route(req, path_params, contract, &blk) }
+    def add_route(verb, path, body: nil, query: nil, &blk)
+      @router.add(verb, path) { |req, path_params| handle_async_route(req, path_params, body, query, &blk) }
     end
 
-    def handle_async_route(req, path_params, contract, &blk)
-      # Falcon already provides async context, just set up fiber-local storage
-      # Use current fiber as the task - this works because Falcon uses fibers
-      current_task = Fiber.current
+    def handle_async_route(req, path_params, body_schema, query_schema, &blk)
+      current_task = Async::Task.current
       Fiber[:async_task] = current_task
 
       begin
-        # Build the unified input object
         input = {
           path: path_params,
           query: req.params,
           body: parse_body(req)
         }
 
-        # Run validation if a contract is provided
-        if contract
-          result = contract.call(input)
-          unless result.success?
-            # Return validation error response
-            return [
-              422,
-              { 'content-type' => 'application/json' },
-              [JSON.dump(errors: result.errors.to_h)]
-            ]
-          end
-          input = result.to_h
-        end
+        input[:query] = Schema.validate(query_schema, input[:query], location: 'query') if query_schema
 
-        # Call user handler (now in async context)
-        payload, status = blk.call(input, req)
+        input[:body] = Schema.validate(body_schema, input[:body], location: 'body') if body_schema
 
-        # Return JSON response
+        payload, status = blk.call(input, req, current_task)
+
         [
           status || 200,
           { 'content-type' => 'application/json' },
           [JSON.dump(payload)]
         ]
+      rescue ValidationError => e
+        e.to_response
+      rescue HTTPException => e
+        e.to_response
       ensure
-        # Clean up fiber-local storage
         Fiber[:async_task] = nil
       end
     end

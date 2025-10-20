@@ -41,3 +41,59 @@ The gem is available as open source under the terms of the [MIT License](https:/
 ## Code of Conduct
 
 Everyone interacting in the FunApi project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://github.com/[USERNAME]/fun_api/blob/master/CODE_OF_CONDUCT.md).
+
+
+```ruby
+require 'async/http/internet'
+
+App = FunAPI::App.new do |app|
+  app.get "/posts" do |input, req|
+    # We're already in a fiber (Falcon manages this)
+    # Do concurrent requests
+    posts = Async do |task|
+      users_task = task.async { fetch_users }
+      comments_task = task.async { fetch_comments }
+
+      {
+        users: users_task.wait,
+        comments: comments_task.wait
+      }
+    end.wait
+
+    [posts, 200]
+  end
+end
+
+def fetch_users
+  internet = Async::HTTP::Internet.new
+  response = internet.get('https://api.example.com/users')
+  JSON.parse(response.read)
+ensure
+  internet&.close
+end
+
+# Define route modules
+UsersRoutes = ->(app) {
+  app.get "/users" do |input, req|
+    [User.all, 200]
+  end
+
+  app.get "/users/:id" do |input, req|
+    [User.find(input[:path]["id"]), 200]
+  end
+}
+
+PostsRoutes = ->(app) {
+  app.get "/posts" do |input, req|
+    [Post.all, 200]
+  end
+}
+
+# Compose app
+App = FunAPI::App.new do |app|
+  app.use FunAPI::Middleware::Logger
+
+  UsersRoutes.call(app)
+  PostsRoutes.call(app)
+end
+```
