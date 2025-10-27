@@ -12,14 +12,19 @@ module FunApi
 
     def add(verb, path, metadata: {}, &handler)
       keys = []
-      regex = path.split('/').map do |seg|
-        if seg.start_with?(':')
-          keys << seg.delete_prefix(':')
-          '([^/]+)'
-        else
-          Regexp.escape(seg)
-        end
-      end.join('/')
+
+      regex = if path == '/'
+                '/'
+              else
+                path.split('/').map do |seg|
+                  if seg.start_with?(':')
+                    keys << seg.delete_prefix(':')
+                    '([^/]+)'
+                  else
+                    Regexp.escape(seg)
+                  end
+                end.join('/')
+              end
 
       route_metadata = metadata.merge(path_template: path)
       @routes << Route.new(verb.upcase, /\A#{regex}\z/, keys, handler, route_metadata)

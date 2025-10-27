@@ -48,10 +48,42 @@ module FunApi
       add_route('DELETE', path, query: query, response_schema: response_schema, &blk)
     end
 
-    # Rack interface
+    def use(middleware, *args, &block)
+      @middleware_stack << [middleware, args, block]
+      self
+    end
+
+    def add_cors(allow_origins: ['*'], allow_methods: ['*'], allow_headers: ['*'],
+                 expose_headers: [], max_age: 600, allow_credentials: false)
+      require_relative 'middleware/cors'
+      use FunApi::Middleware::Cors,
+          allow_origins: allow_origins,
+          allow_methods: allow_methods,
+          allow_headers: allow_headers,
+          expose_headers: expose_headers,
+          max_age: max_age,
+          allow_credentials: allow_credentials
+    end
+
+    def add_trusted_host(allowed_hosts:)
+      require_relative 'middleware/trusted_host'
+      use FunApi::Middleware::TrustedHost, allowed_hosts: allowed_hosts
+    end
+
+    def add_request_logger(logger: nil, level: :info)
+      require_relative 'middleware/request_logger'
+      use FunApi::Middleware::RequestLogger, logger: logger, level: level
+    end
+
+    def add_gzip
+      use Rack::Deflater, if: lambda { |_env, _status, headers, _body|
+        headers['content-type']&.start_with?('application/json')
+      }
+    end
+
     def call(env)
-      # app = build_middleware_chain
-      @router.call(env)
+      app = build_middleware_chain
+      app.call(env)
     end
 
     # Run the app with Falcon
@@ -141,15 +173,19 @@ module FunApi
       end
     end
 
-    # def build_middleware_chain
-    #   app = ->(env) { handle_request(env) }
-    #
-    #   @middleware_stack.reverse_each do |middleware, args|
-    #     app = middleware.new(app, *args)
-    #   end
-    #
-    #   app
-    # end
+    def build_middleware_chain
+      app = @router
+
+      @middleware_stack.reverse_each do |middleware, args, block|
+        app = if args.length == 1 && args.first.is_a?(Hash) && args.first.keys.all? { |k| k.is_a?(Symbol) }
+                middleware.new(app, **args.first, &block)
+              else
+                middleware.new(app, *args, &block)
+              end
+      end
+
+      app
+    end
 
     # def handle_request(env)
     #   request = Rack::Request.new(env)
