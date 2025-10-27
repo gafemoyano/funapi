@@ -1,4 +1,4 @@
-require 'logger'
+require "logger"
 
 module FunApi
   module Middleware
@@ -24,8 +24,8 @@ module FunApi
       def log_request(env, status, duration)
         request = Rack::Request.new(env)
         @logger.send(@level,
-                     "#{request.request_method} #{request.path} " \
-                     "#{status} #{(duration * 1000).round(2)}ms")
+          "#{request.request_method} #{request.path} " \
+          "#{status} #{(duration * 1000).round(2)}ms")
       end
     end
   end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'test_helper'
+require "test_helper"
 
 class TestSchema < Minitest::Test
   def test_define_creates_schema
@@ -17,9 +17,9 @@ class TestSchema < Minitest::Test
       required(:age).filled(:integer)
     end
 
-    result = FunApi::Schema.validate(schema, { name: 'Alice', age: 30 }, location: 'body')
+    result = FunApi::Schema.validate(schema, {name: "Alice", age: 30}, location: "body")
 
-    assert_equal 'Alice', result[:name]
+    assert_equal "Alice", result[:name]
     assert_equal 30, result[:age]
   end
 
@@ -28,9 +28,9 @@ class TestSchema < Minitest::Test
       required(:name).filled(:string)
     end
 
-    result = FunApi::Schema.validate(schema, { 'name' => 'Bob' }, location: 'body')
+    result = FunApi::Schema.validate(schema, {"name" => "Bob"}, location: "body")
 
-    assert_equal 'Bob', result[:name]
+    assert_equal "Bob", result[:name]
   end
 
   def test_validate_failure_raises_validation_error
@@ -39,7 +39,7 @@ class TestSchema < Minitest::Test
     end
 
     error = assert_raises(FunApi::ValidationError) do
-      FunApi::Schema.validate(schema, {}, location: 'body')
+      FunApi::Schema.validate(schema, {}, location: "body")
     end
 
     assert_equal 422, error.status_code
@@ -51,7 +51,7 @@ class TestSchema < Minitest::Test
     end
 
     error = assert_raises(FunApi::ValidationError) do
-      FunApi::Schema.validate(schema, {}, location: 'body')
+      FunApi::Schema.validate(schema, {}, location: "body")
     end
 
     detail = error.detail
@@ -67,10 +67,10 @@ class TestSchema < Minitest::Test
     end
 
     error = assert_raises(FunApi::ValidationError) do
-      FunApi::Schema.validate(schema, {}, location: 'body')
+      FunApi::Schema.validate(schema, {}, location: "body")
     end
 
-    assert(error.detail.any? { |e| e[:loc].include?('username') })
+    assert(error.detail.any? { |e| e[:loc].include?("username") })
   end
 
   def test_optional_fields_not_required
@@ -79,9 +79,9 @@ class TestSchema < Minitest::Test
       optional(:age).filled(:integer)
     end
 
-    result = FunApi::Schema.validate(schema, { name: 'Charlie' }, location: 'body')
+    result = FunApi::Schema.validate(schema, {name: "Charlie"}, location: "body")
 
-    assert_equal 'Charlie', result[:name]
+    assert_equal "Charlie", result[:name]
     refute result.key?(:age)
   end
 
@@ -91,10 +91,10 @@ class TestSchema < Minitest::Test
     end
 
     error = assert_raises(FunApi::ValidationError) do
-      FunApi::Schema.validate(schema, { age: 'not a number' }, location: 'body')
+      FunApi::Schema.validate(schema, {age: "not a number"}, location: "body")
     end
 
-    assert(error.detail.any? { |e| e[:loc].include?('age') })
+    assert(error.detail.any? { |e| e[:loc].include?("age") })
   end
 
   def test_array_schema_validation
@@ -104,13 +104,13 @@ class TestSchema < Minitest::Test
 
     result = FunApi::Schema.validate(
       [item_schema],
-      [{ name: 'Item 1' }, { name: 'Item 2' }],
-      location: 'body'
+      [{name: "Item 1"}, {name: "Item 2"}],
+      location: "body"
     )
 
     assert_equal 2, result.length
-    assert_equal 'Item 1', result[0][:name]
-    assert_equal 'Item 2', result[1][:name]
+    assert_equal "Item 1", result[0][:name]
+    assert_equal "Item 2", result[1][:name]
   end
 
   def test_array_schema_validation_failure
@@ -121,8 +121,8 @@ class TestSchema < Minitest::Test
     error = assert_raises(FunApi::ValidationError) do
       FunApi::Schema.validate(
         [item_schema],
-        [{ name: 'Good' }, { bad: 'data' }],
-        location: 'body'
+        [{name: "Good"}, {bad: "data"}],
+        location: "body"
       )
     end
 
@@ -135,11 +135,11 @@ class TestSchema < Minitest::Test
       required(:name).filled(:string)
     end
 
-    data = { id: 1, name: 'User', password: 'secret', internal: 'data' }
+    data = {id: 1, name: "User", password: "secret", internal: "data"}
     result = FunApi::Schema.validate_response(schema, data)
 
     assert_equal 1, result[:id]
-    assert_equal 'User', result[:name]
+    assert_equal "User", result[:name]
     refute result.key?(:password)
     refute result.key?(:internal)
   end
@@ -151,15 +151,15 @@ class TestSchema < Minitest::Test
     end
 
     data = [
-      { id: 1, name: 'User 1', secret: 'data1' },
-      { id: 2, name: 'User 2', secret: 'data2' }
+      {id: 1, name: "User 1", secret: "data1"},
+      {id: 2, name: "User 2", secret: "data2"}
     ]
 
     result = FunApi::Schema.validate_response([schema], data)
 
     assert_equal 2, result.length
     assert_equal 1, result[0][:id]
-    assert_equal 'User 1', result[0][:name]
+    assert_equal "User 1", result[0][:name]
     refute result[0].key?(:secret)
   end
 
@@ -173,12 +173,12 @@ class TestSchema < Minitest::Test
 
     result = FunApi::Schema.validate(
       schema,
-      { user: { name: 'Alice', email: 'alice@example.com' } },
-      location: 'body'
+      {user: {name: "Alice", email: "alice@example.com"}},
+      location: "body"
     )
 
-    assert_equal 'Alice', result[:user][:name]
-    assert_equal 'alice@example.com', result[:user][:email]
+    assert_equal "Alice", result[:user][:name]
+    assert_equal "alice@example.com", result[:user][:email]
   end
 
   def test_multiple_validation_errors
@@ -189,7 +189,7 @@ class TestSchema < Minitest::Test
     end
 
     error = assert_raises(FunApi::ValidationError) do
-      FunApi::Schema.validate(schema, {}, location: 'body')
+      FunApi::Schema.validate(schema, {}, location: "body")
     end
 
     assert_equal 3, error.detail.length

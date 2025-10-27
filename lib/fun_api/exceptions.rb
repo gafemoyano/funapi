@@ -12,7 +12,7 @@ module FunApi
     def to_response
       [
         status_code,
-        { 'content-type' => 'application/json' }.merge(headers),
+        {"content-type" => "application/json"}.merge(headers),
         [JSON.dump(detail: detail)]
       ]
     end
@@ -21,13 +21,13 @@ module FunApi
 
     def default_detail
       case status_code
-      when 400 then 'Bad Request'
-      when 401 then 'Unauthorized'
-      when 403 then 'Forbidden'
-      when 404 then 'Not Found'
-      when 422 then 'Unprocessable Entity'
-      when 500 then 'Internal Server Error'
-      else 'Error'
+      when 400 then "Bad Request"
+      when 401 then "Unauthorized"
+      when 403 then "Forbidden"
+      when 404 then "Not Found"
+      when 422 then "Unprocessable Entity"
+      when 500 then "Internal Server Error"
+      else "Error"
       end
     end
   end
@@ -43,7 +43,7 @@ module FunApi
     def to_response
       [
         status_code,
-        { 'content-type' => 'application/json' }.merge(headers),
+        {"content-type" => "application/json"}.merge(headers),
         [JSON.dump(detail: detail)]
       ]
     end
@@ -55,7 +55,7 @@ module FunApi
         {
           loc: error.path.map(&:to_s),
           msg: error.text,
-          type: 'value_error'
+          type: "value_error"
         }
       end
     end

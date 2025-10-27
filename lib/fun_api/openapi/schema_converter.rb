@@ -6,7 +6,7 @@ module FunApi
 
         if dry_schema.is_a?(Array) && dry_schema.length == 1
           return {
-            type: 'array',
+            type: "array",
             items: to_json_schema(dry_schema.first, schema_name)
           }
         end
@@ -23,7 +23,7 @@ module FunApi
         end
 
         schema = {
-          type: 'object',
+          type: "object",
           properties: properties
         }
 
@@ -33,34 +33,34 @@ module FunApi
 
       def self.extract_field_info(rule)
         rule_str = rule.to_s
-        is_required = rule.class.name.include?('And')
+        is_required = rule.class.name.include?("And")
 
-        type_info = if rule_str.include?('array?')
-                      items_type = if rule_str.include?('str?')
-                                     { type: 'string' }
-                                   elsif rule_str.include?('int?')
-                                     { type: 'integer' }
-                                   elsif rule_str.include?('float?') || rule_str.include?('decimal?')
-                                     { type: 'number' }
-                                   elsif rule_str.include?('bool?')
-                                     { type: 'boolean' }
-                                   else
-                                     {}
-                                   end
-                      { type: 'array', items: items_type }
-                    elsif rule_str.include?('hash?')
-                      { type: 'object' }
-                    elsif rule_str.include?('str?')
-                      { type: 'string' }
-                    elsif rule_str.include?('int?')
-                      { type: 'integer' }
-                    elsif rule_str.include?('float?') || rule_str.include?('decimal?')
-                      { type: 'number' }
-                    elsif rule_str.include?('bool?')
-                      { type: 'boolean' }
-                    else
-                      { type: 'string' }
-                    end
+        type_info = if rule_str.include?("array?")
+          items_type = if rule_str.include?("str?")
+            {type: "string"}
+          elsif rule_str.include?("int?")
+            {type: "integer"}
+          elsif rule_str.include?("float?") || rule_str.include?("decimal?")
+            {type: "number"}
+          elsif rule_str.include?("bool?")
+            {type: "boolean"}
+          else
+            {}
+          end
+          {type: "array", items: items_type}
+        elsif rule_str.include?("hash?")
+          {type: "object"}
+        elsif rule_str.include?("str?")
+          {type: "string"}
+        elsif rule_str.include?("int?")
+          {type: "integer"}
+        elsif rule_str.include?("float?") || rule_str.include?("decimal?")
+          {type: "number"}
+        elsif rule_str.include?("bool?")
+          {type: "boolean"}
+        else
+          {type: "string"}
+        end
 
         {
           schema: type_info,
@@ -73,7 +73,7 @@ module FunApi
           klass.constants.each do |const_name|
             const_value = klass.const_get(const_name)
             return const_name.to_s if const_value == schema_obj
-          rescue StandardError
+          rescue
             next
           end
         end

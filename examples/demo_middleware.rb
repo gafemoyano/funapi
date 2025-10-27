@@ -1,5 +1,5 @@
-require_relative 'lib/fun_api'
-require_relative 'lib/fun_api/server/falcon'
+require_relative "lib/fun_api"
+require_relative "lib/fun_api/server/falcon"
 
 class SimpleMiddleware
   def initialize(app)
@@ -7,16 +7,16 @@ class SimpleMiddleware
   end
 
   def call(env)
-    puts '[SimpleMiddleware] Before request'
+    puts "[SimpleMiddleware] Before request"
     status, headers, body = @app.call(env)
     puts "[SimpleMiddleware] After request - Status: #{status}"
-    headers['X-Simple-Middleware'] = 'true'
+    headers["X-Simple-Middleware"] = "true"
     [status, headers, body]
   end
 end
 
 class LoggingMiddleware
-  def initialize(app, prefix = 'LOG')
+  def initialize(app, prefix = "LOG")
     @app = app
     @prefix = prefix
   end
@@ -29,27 +29,27 @@ class LoggingMiddleware
 end
 
 app = FunApi::App.new(
-  title: 'Middleware Test API',
-  version: '1.0.0'
+  title: "Middleware Test API",
+  version: "1.0.0"
 ) do |api|
   api.use SimpleMiddleware
-  api.use LoggingMiddleware, 'ACCESS'
+  api.use LoggingMiddleware, "ACCESS"
 
-  api.get '/test' do |_input, _req, _task|
-    [{ message: 'Middleware test successful!' }, 200]
+  api.get "/test" do |_input, _req, _task|
+    [{message: "Middleware test successful!"}, 200]
   end
 
-  api.get '/hello/:name' do |input, _req, _task|
-    name = input[:path]['name']
-    [{ greeting: "Hello, #{name}!" }, 200]
+  api.get "/hello/:name" do |input, _req, _task|
+    name = input[:path]["name"]
+    [{greeting: "Hello, #{name}!"}, 200]
   end
 end
 
-puts 'Starting FunApi with middleware...'
-puts 'Test endpoints:'
-puts '  http://localhost:3000/test'
-puts '  http://localhost:3000/hello/World'
-puts '  http://localhost:3000/docs'
-puts ''
+puts "Starting FunApi with middleware..."
+puts "Test endpoints:"
+puts "  http://localhost:3000/test"
+puts "  http://localhost:3000/hello/World"
+puts "  http://localhost:3000/docs"
+puts ""
 
 FunApi::Server::Falcon.start(app, port: 3000)

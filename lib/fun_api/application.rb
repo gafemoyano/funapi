@@ -4,19 +4,22 @@ require 'async'
 require 'async/http/server'
 require 'async/http/endpoint'
 require 'protocol/rack'
+require 'dry-container'
 require_relative 'router'
 require_relative 'async'
 require_relative 'exceptions'
 require_relative 'schema'
+require_relative 'depends'
 require_relative 'openapi/spec_generator'
 
 module FunApi
   class App
-    attr_reader :openapi_config
+    attr_reader :openapi_config, :container
 
     def initialize(title: 'FunApi Application', version: '1.0.0', description: '')
       @router = Router.new
       @middleware_stack = []
+      @container = Dry::Container.new
       @openapi_config = {
         title: title,
         version: version,
@@ -28,24 +31,32 @@ module FunApi
       register_openapi_routes
     end
 
-    def get(path, query: nil, response_schema: nil, &blk)
-      add_route('GET', path, query: query, response_schema: response_schema, &blk)
+    def register(key, &block)
+      @container.register(key, &block)
     end
 
-    def post(path, body: nil, query: nil, response_schema: nil, &blk)
-      add_route('POST', path, body: body, query: query, response_schema: response_schema, &blk)
+    def resolve(key)
+      @container.resolve(key)
     end
 
-    def put(path, body: nil, query: nil, response_schema: nil, &blk)
-      add_route('PUT', path, body: body, query: query, response_schema: response_schema, &blk)
+    def get(path, query: nil, response_schema: nil, depends: nil, &blk)
+      add_route('GET', path, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
-    def patch(path, body: nil, query: nil, response_schema: nil, &blk)
-      add_route('PATCH', path, body: body, query: query, response_schema: response_schema, &blk)
+    def post(path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
+      add_route('POST', path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
-    def delete(path, query: nil, response_schema: nil, &blk)
-      add_route('DELETE', path, query: query, response_schema: response_schema, &blk)
+    def put(path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
+      add_route('PUT', path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
+    end
+
+    def patch(path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
+      add_route('PATCH', path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
+    end
+
+    def delete(path, query: nil, response_schema: nil, depends: nil, &blk)
+      add_route('DELETE', path, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
     def use(middleware, *args, &block)
@@ -126,21 +137,23 @@ module FunApi
 
     private
 
-    def add_route(verb, path, body: nil, query: nil, response_schema: nil, &blk)
+    def add_route(verb, path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
       metadata = {
         body_schema: body,
         query_schema: query,
-        response_schema: response_schema
+        response_schema: response_schema,
+        dependencies: normalize_dependencies(depends)
       }
 
       @router.add(verb, path, metadata: metadata) do |req, path_params|
-        handle_async_route(req, path_params, body, query, response_schema, &blk)
+        handle_async_route(req, path_params, body, query, response_schema, metadata[:dependencies], &blk)
       end
     end
 
-    def handle_async_route(req, path_params, body_schema, query_schema, response_schema, &blk)
+    def handle_async_route(req, path_params, body_schema, query_schema, response_schema, dependencies, &blk)
       current_task = Async::Task.current
       Fiber[:async_task] = current_task
+      cleanup_procs = []
 
       begin
         input = {
@@ -153,7 +166,9 @@ module FunApi
 
         input[:body] = Schema.validate(body_schema, input[:body], location: 'body') if body_schema
 
-        payload, status = blk.call(input, req, current_task)
+        resolved_deps, cleanup_procs = resolve_dependencies(dependencies, input, req, current_task)
+
+        payload, status = blk.call(input, req, current_task, **resolved_deps)
 
         payload = normalize_payload(payload)
 
@@ -169,6 +184,11 @@ module FunApi
       rescue HTTPException => e
         e.to_response
       ensure
+        cleanup_procs.each do |cleanup|
+          cleanup.call
+        rescue StandardError => e
+          warn "Dependency cleanup failed: #{e.message}"
+        end
         Fiber[:async_task] = nil
       end
     end
@@ -296,6 +316,93 @@ module FunApi
       else
         item
       end
+    end
+
+    def normalize_dependencies(depends)
+      return {} if depends.nil?
+
+      normalized = {}
+
+      case depends
+      when Array
+        depends.each do |dep_name|
+          sym = dep_name.to_sym
+          normalized[sym] = { type: :container, key: sym }
+        end
+      when Hash
+        depends.each do |key, value|
+          normalized[key.to_sym] = case value
+                                   when Depends
+                                     { type: :depends, callable: value }
+                                   when Symbol
+                                     { type: :container, key: value }
+                                   when Proc, Method
+                                     { type: :depends, callable: Depends.new(value) }
+                                   when nil
+                                     { type: :container, key: key.to_sym }
+                                   else
+                                     unless value.respond_to?(:call)
+                                       raise ArgumentError, "Dependency must be callable, Depends, Symbol, or nil for #{key}"
+                                     end
+
+                                     { type: :depends, callable: Depends.new(value) }
+
+                                   end
+        end
+      else
+        raise ArgumentError, 'depends must be an Array or Hash'
+      end
+
+      normalized
+    end
+
+    def extract_resource_and_cleanup(result)
+      if result.is_a?(Array) && result.length == 2 && result[1].respond_to?(:call)
+        [result[0], result[1]]
+      else
+        [result, nil]
+      end
+    end
+
+    def resolve_dependencies(dependencies, input, req, task)
+      return [{}, []] if dependencies.nil? || dependencies.empty?
+
+      cache = {}
+      cleanup_procs = []
+
+      context = {
+        input: input,
+        req: req,
+        task: task,
+        container: @container
+      }
+
+      resolved = dependencies.transform_values do |dep_info|
+        case dep_info[:type]
+        when :container
+          cache_key = "container:#{dep_info[:key]}"
+          if cache.key?(cache_key)
+            cache[cache_key][:resource]
+          else
+            raw_result = @container.resolve(dep_info[:key])
+            resource, cleanup = extract_resource_and_cleanup(raw_result)
+            cache[cache_key] = { resource: resource, cleanup: cleanup }
+            cleanup_procs << cleanup if cleanup
+            resource
+          end
+        when :depends
+          result, cleanup = dep_info[:callable].call(context, cache)
+          cleanup_procs << cleanup if cleanup
+          result
+        end
+      end
+
+      [resolved, cleanup_procs]
+    rescue StandardError => e
+      raise HTTPException.new(
+        status_code: 500,
+        detail: "Dependency resolution failed: #{e.message}"
+      )
     end
 
     def register_openapi_routes

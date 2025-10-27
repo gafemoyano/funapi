@@ -1,4 +1,4 @@
-require_relative 'schema_converter'
+require_relative "schema_converter"
 
 module FunApi
   module OpenAPI
@@ -12,7 +12,7 @@ module FunApi
 
       def generate
         {
-          openapi: '3.0.3',
+          openapi: "3.0.3",
           info: build_info,
           paths: build_paths,
           components: build_components
@@ -63,9 +63,9 @@ module FunApi
         route.keys.map do |key|
           {
             name: key,
-            in: 'path',
+            in: "path",
             required: true,
-            schema: { type: 'string' }
+            schema: {type: "string"}
           }
         end
       end
@@ -83,7 +83,7 @@ module FunApi
         json_schema[:properties].map do |name, prop_schema|
           {
             name: name.to_s,
-            in: 'query',
+            in: "query",
             required: required_fields.include?(name.to_s),
             schema: prop_schema
           }
@@ -114,7 +114,7 @@ module FunApi
 
           {
             "200": {
-              description: 'Successful response',
+              description: "Successful response",
               content: {
                 "application/json": {
                   schema: schema_ref
@@ -125,7 +125,7 @@ module FunApi
         else
           {
             "200": {
-              description: 'Successful response'
+              description: "Successful response"
             }
           }
         end
@@ -139,8 +139,8 @@ module FunApi
 
         unless schema_name
           @schema_counter += 1
-          method_name = path.split('/').reject(&:empty?).map do |s|
-            s.start_with?(':') ? s[1..-1].capitalize : s.capitalize
+          method_name = path.split("/").reject(&:empty?).map do |s|
+            s.start_with?(":") ? s[1..-1].capitalize : s.capitalize
           end.join
           schema_name = "#{method_name}#{verb.capitalize}Schema#{@schema_counter}"
         end
@@ -149,11 +149,11 @@ module FunApi
 
         if is_array
           {
-            type: 'array',
-            items: { "$ref": "#/components/schemas/#{schema_name}" }
+            type: "array",
+            items: {"$ref": "#/components/schemas/#{schema_name}"}
           }
         else
-          { "$ref": "#/components/schemas/#{schema_name}" }
+          {"$ref": "#/components/schemas/#{schema_name}"}
         end
       end
 

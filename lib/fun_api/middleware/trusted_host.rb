@@ -7,13 +7,13 @@ module FunApi
       end
 
       def call(env)
-        host = env['HTTP_HOST']&.split(':')&.first
+        host = env["HTTP_HOST"]&.split(":")&.first
 
         unless host_allowed?(host)
           return [
             400,
-            { 'content-type' => 'application/json' },
-            [JSON.dump(detail: 'Invalid host header')]
+            {"content-type" => "application/json"},
+            [JSON.dump(detail: "Invalid host header")]
           ]
         end
 

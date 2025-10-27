@@ -5,9 +5,9 @@ module FunApi
     attr_accessor :bind, :port, :env, :workers, :tls, :rack_app
 
     def initialize(
-      bind: 'https://localhost',   # Falcon defaults to HTTPS in dev
+      bind: "https://localhost",   # Falcon defaults to HTTPS in dev
       port: 9292,
-      env:  ENV.fetch('RACK_ENV', 'development'),
+      env: ENV.fetch("RACK_ENV", "development"),
       workers: nil,                # let falcon default; can pass via --count
       tls: {}, # {cert:, key:} if you want to override
       rack_app: nil

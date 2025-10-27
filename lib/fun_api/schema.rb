@@ -1,4 +1,4 @@
-require 'dry-schema'
+require "dry-schema"
 
 module FunApi
   class Schema
@@ -6,7 +6,7 @@ module FunApi
       Dry::Schema.Params(&block)
     end
 
-    def self.validate(schema, data, location: 'body')
+    def self.validate(schema, data, location: "body")
       return data unless schema
 
       if schema.is_a?(Array) && schema.length == 1

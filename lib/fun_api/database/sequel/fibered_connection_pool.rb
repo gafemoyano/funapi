@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 #
 # Taken from https://github.com/umbrellio/umbrellio-sequel-plugins?tab=readme-ov-file#fibered-connection-pool
 # Released under MIT License.
@@ -9,7 +10,7 @@ require "async/notification"
 
 class Sequel::FiberedConnectionPool < Sequel::ConnectionPool
   def initialize(db, opts = Sequel::OPTS)
-    super(db, opts)
+    super
 
     @max_connections = opts[:max_connections]
     @available_connections = []
@@ -45,9 +46,7 @@ class Sequel::FiberedConnectionPool < Sequel::ConnectionPool
     @size = 0
   end
 
-  def size
-    @size
-  end
+  attr_reader :size
 
   private
 

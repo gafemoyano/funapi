@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'test_helper'
+require "test_helper"
 
 class TestResponseSchema < Minitest::Test
   def async_request(app, method, path, **options)
@@ -20,22 +20,22 @@ class TestResponseSchema < Minitest::Test
     end
 
     app = FunApi::App.new do |api|
-      api.get '/user', response_schema: output_schema do |_input, _req, _task|
+      api.get "/user", response_schema: output_schema do |_input, _req, _task|
         user = {
           id: 1,
-          name: 'Alice',
-          password: 'secret',
-          internal_data: 'should not be visible'
+          name: "Alice",
+          password: "secret",
+          internal_data: "should not be visible"
         }
         [user, 200]
       end
     end
 
-    res = async_request(app, :get, '/user')
+    res = async_request(app, :get, "/user")
     data = parse(res)
 
     assert_equal 1, data[:id]
-    assert_equal 'Alice', data[:name]
+    assert_equal "Alice", data[:name]
     refute data.key?(:password)
     refute data.key?(:internal_data)
   end
@@ -48,20 +48,20 @@ class TestResponseSchema < Minitest::Test
     end
 
     app = FunApi::App.new do |api|
-      api.get '/user/:id', response_schema: output_schema do |input, _req, _task|
-        if input[:path]['id'] == '1'
-          [{ id: 1, name: 'Alice', email: 'alice@example.com' }, 200]
+      api.get "/user/:id", response_schema: output_schema do |input, _req, _task|
+        if input[:path]["id"] == "1"
+          [{id: 1, name: "Alice", email: "alice@example.com"}, 200]
         else
-          [{ id: 2, name: 'Bob' }, 200]
+          [{id: 2, name: "Bob"}, 200]
         end
       end
     end
 
-    res1 = async_request(app, :get, '/user/1')
+    res1 = async_request(app, :get, "/user/1")
     data1 = parse(res1)
-    assert_equal 'alice@example.com', data1[:email]
+    assert_equal "alice@example.com", data1[:email]
 
-    res2 = async_request(app, :get, '/user/2')
+    res2 = async_request(app, :get, "/user/2")
     data2 = parse(res2)
     refute data2.key?(:email)
   end
@@ -73,21 +73,21 @@ class TestResponseSchema < Minitest::Test
     end
 
     app = FunApi::App.new do |api|
-      api.get '/users', response_schema: [output_schema] do |_input, _req, _task|
+      api.get "/users", response_schema: [output_schema] do |_input, _req, _task|
         users = [
-          { id: 1, name: 'Alice', password: 'secret1' },
-          { id: 2, name: 'Bob', password: 'secret2' }
+          {id: 1, name: "Alice", password: "secret1"},
+          {id: 2, name: "Bob", password: "secret2"}
         ]
         [users, 200]
       end
     end
 
-    res = async_request(app, :get, '/users')
+    res = async_request(app, :get, "/users")
     data = parse(res)
 
     assert_equal 2, data.length
-    assert_equal 'Alice', data[0][:name]
-    assert_equal 'Bob', data[1][:name]
+    assert_equal "Alice", data[0][:name]
+    assert_equal "Bob", data[1][:name]
     refute data[0].key?(:password)
     refute data[1].key?(:password)
   end
@@ -102,38 +102,38 @@ class TestResponseSchema < Minitest::Test
     end
 
     app = FunApi::App.new do |api|
-      api.get '/user', response_schema: output_schema do |_input, _req, _task|
+      api.get "/user", response_schema: output_schema do |_input, _req, _task|
         user = {
           id: 1,
-          profile: { name: 'Alice', age: 30, secret: 'hidden' },
-          password: 'should not appear'
+          profile: {name: "Alice", age: 30, secret: "hidden"},
+          password: "should not appear"
         }
         [user, 200]
       end
     end
 
-    res = async_request(app, :get, '/user')
+    res = async_request(app, :get, "/user")
     data = parse(res)
 
     assert_equal 1, data[:id]
-    assert_equal 'Alice', data[:profile][:name]
+    assert_equal "Alice", data[:profile][:name]
     assert_equal 30, data[:profile][:age]
     refute data.key?(:password)
   end
 
   def test_response_schema_without_schema_returns_all_fields
     app = FunApi::App.new do |api|
-      api.get '/user' do |_input, _req, _task|
-        [{ id: 1, name: 'Alice', password: 'visible' }, 200]
+      api.get "/user" do |_input, _req, _task|
+        [{id: 1, name: "Alice", password: "visible"}, 200]
       end
     end
 
-    res = async_request(app, :get, '/user')
+    res = async_request(app, :get, "/user")
     data = parse(res)
 
     assert_equal 1, data[:id]
-    assert_equal 'Alice', data[:name]
-    assert_equal 'visible', data[:password]
+    assert_equal "Alice", data[:name]
+    assert_equal "visible", data[:password]
   end
 
   def test_response_schema_filters_each_item_in_array
@@ -143,16 +143,16 @@ class TestResponseSchema < Minitest::Test
     end
 
     app = FunApi::App.new do |api|
-      api.get '/posts', response_schema: [output_schema] do |_input, _req, _task|
+      api.get "/posts", response_schema: [output_schema] do |_input, _req, _task|
         posts = [
-          { id: 1, title: 'Post 1', author_id: 100, internal: 'data' },
-          { id: 2, title: 'Post 2', author_id: 101, internal: 'more' }
+          {id: 1, title: "Post 1", author_id: 100, internal: "data"},
+          {id: 2, title: "Post 2", author_id: 101, internal: "more"}
         ]
         [posts, 200]
       end
     end
 
-    res = async_request(app, :get, '/posts')
+    res = async_request(app, :get, "/posts")
     data = parse(res)
 
     assert_equal 2, data.length
@@ -170,12 +170,12 @@ class TestResponseSchema < Minitest::Test
     end
 
     app = FunApi::App.new do |api|
-      api.get '/items', response_schema: [output_schema] do |_input, _req, _task|
+      api.get "/items", response_schema: [output_schema] do |_input, _req, _task|
         [[], 200]
       end
     end
 
-    res = async_request(app, :get, '/items')
+    res = async_request(app, :get, "/items")
     data = parse(res)
 
     assert_equal [], data
@@ -193,23 +193,23 @@ class TestResponseSchema < Minitest::Test
     end
 
     app = FunApi::App.new do |api|
-      api.get '/user', response_schema: user_schema do |_input, _req, _task|
-        [{ id: 1, name: 'Alice', password: 'secret' }, 200]
+      api.get "/user", response_schema: user_schema do |_input, _req, _task|
+        [{id: 1, name: "Alice", password: "secret"}, 200]
       end
 
-      api.get '/post', response_schema: post_schema do |_input, _req, _task|
-        [{ id: 1, title: 'Post', author: 'Alice' }, 200]
+      api.get "/post", response_schema: post_schema do |_input, _req, _task|
+        [{id: 1, title: "Post", author: "Alice"}, 200]
       end
     end
 
-    user_res = async_request(app, :get, '/user')
+    user_res = async_request(app, :get, "/user")
     user_data = parse(user_res)
-    assert_equal 'Alice', user_data[:name]
+    assert_equal "Alice", user_data[:name]
     refute user_data.key?(:password)
 
-    post_res = async_request(app, :get, '/post')
+    post_res = async_request(app, :get, "/post")
     post_data = parse(post_res)
-    assert_equal 'Post', post_data[:title]
+    assert_equal "Post", post_data[:title]
     refute post_data.key?(:author)
   end
 
@@ -225,7 +225,7 @@ class TestResponseSchema < Minitest::Test
     end
 
     app = FunApi::App.new do |api|
-      api.post '/users', body: input_schema, response_schema: output_schema do |input, _req, _task|
+      api.post "/users", body: input_schema, response_schema: output_schema do |input, _req, _task|
         user = {
           id: 123,
           email: input[:body][:email],
@@ -239,15 +239,15 @@ class TestResponseSchema < Minitest::Test
     res = async_request(
       app,
       :post,
-      '/users',
-      'CONTENT_TYPE' => 'application/json',
-      :input => { email: 'test@example.com', password: 'secret' }.to_json
+      "/users",
+      "CONTENT_TYPE" => "application/json",
+      :input => {email: "test@example.com", password: "secret"}.to_json
     )
 
     assert_equal 201, res.status
     data = parse(res)
     assert_equal 123, data[:id]
-    assert_equal 'test@example.com', data[:email]
+    assert_equal "test@example.com", data[:email]
     refute data.key?(:password)
     refute data.key?(:created_at)
   end

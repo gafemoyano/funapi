@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'test_helper'
+require "test_helper"
 
 class TestMiddleware < Minitest::Test
   class TestMiddleware1
@@ -9,11 +9,11 @@ class TestMiddleware < Minitest::Test
     end
 
     def call(env)
-      env['test.order'] ||= []
-      env['test.order'] << '1-before'
+      env["test.order"] ||= []
+      env["test.order"] << "1-before"
       status, headers, body = @app.call(env)
-      env['test.order'] << '1-after'
-      headers['X-Test-1'] = 'true'
+      env["test.order"] << "1-after"
+      headers["X-Test-1"] = "true"
       [status, headers, body]
     end
   end
@@ -24,11 +24,11 @@ class TestMiddleware < Minitest::Test
     end
 
     def call(env)
-      env['test.order'] ||= []
-      env['test.order'] << '2-before'
+      env["test.order"] ||= []
+      env["test.order"] << "2-before"
       status, headers, body = @app.call(env)
-      env['test.order'] << '2-after'
-      headers['X-Test-2'] = 'true'
+      env["test.order"] << "2-after"
+      headers["X-Test-2"] = "true"
       [status, headers, body]
     end
   end
@@ -36,12 +36,12 @@ class TestMiddleware < Minitest::Test
   class OptionsMiddleware
     def initialize(app, **options)
       @app = app
-      @prefix = options[:prefix] || 'default'
+      @prefix = options[:prefix] || "default"
     end
 
     def call(env)
       status, headers, body = @app.call(env)
-      headers['X-Prefix'] = @prefix
+      headers["X-Prefix"] = @prefix
       [status, headers, body]
     end
   end
@@ -49,8 +49,8 @@ class TestMiddleware < Minitest::Test
   def app_with_middleware(&block)
     FunApi::App.new do |api|
       block.call(api) if block
-      api.get '/test' do |_input, _req, _task|
-        [{ message: 'test' }, 200]
+      api.get "/test" do |_input, _req, _task|
+        [{message: "test"}, 200]
       end
     end
   end
@@ -66,10 +66,10 @@ class TestMiddleware < Minitest::Test
       api.use TestMiddleware1
     end
 
-    res = async_request(app, :get, '/test')
+    res = async_request(app, :get, "/test")
 
-    assert_equal '200', res.status.to_s
-    assert_equal 'true', res.headers['X-Test-1']
+    assert_equal "200", res.status.to_s
+    assert_equal "true", res.headers["X-Test-1"]
   end
 
   def test_middleware_execution_order_fifo
@@ -78,14 +78,14 @@ class TestMiddleware < Minitest::Test
       api.use TestMiddleware2
     end
 
-    env = Rack::MockRequest.env_for('/test')
-    env['test.order'] = []
+    env = Rack::MockRequest.env_for("/test")
+    env["test.order"] = []
 
     Async do
       app.call(env)
     end.wait
 
-    assert_equal %w[1-before 2-before 2-after 1-after], env['test.order']
+    assert_equal %w[1-before 2-before 2-after 1-after], env["test.order"]
   end
 
   def test_multiple_middleware_headers
@@ -94,36 +94,36 @@ class TestMiddleware < Minitest::Test
       api.use TestMiddleware2
     end
 
-    res = async_request(app, :get, '/test')
+    res = async_request(app, :get, "/test")
 
-    assert_equal 'true', res.headers['X-Test-1']
-    assert_equal 'true', res.headers['X-Test-2']
+    assert_equal "true", res.headers["X-Test-1"]
+    assert_equal "true", res.headers["X-Test-2"]
   end
 
   def test_middleware_with_keyword_arguments
     app = app_with_middleware do |api|
-      api.use OptionsMiddleware, prefix: 'custom'
+      api.use OptionsMiddleware, prefix: "custom"
     end
 
-    res = async_request(app, :get, '/test')
+    res = async_request(app, :get, "/test")
 
-    assert_equal 'custom', res.headers['X-Prefix']
+    assert_equal "custom", res.headers["X-Prefix"]
   end
 
   def test_middleware_chain_with_no_middleware
     app = app_with_middleware
 
-    res = async_request(app, :get, '/test')
+    res = async_request(app, :get, "/test")
 
-    assert_equal '200', res.status.to_s
+    assert_equal "200", res.status.to_s
   end
 
   def test_trusted_host_middleware_allows_valid_host
     app = app_with_middleware do |api|
-      api.add_trusted_host(allowed_hosts: ['example.org'])
+      api.add_trusted_host(allowed_hosts: ["example.org"])
     end
 
-    env = Rack::MockRequest.env_for('/test', 'HTTP_HOST' => 'example.org')
+    env = Rack::MockRequest.env_for("/test", "HTTP_HOST" => "example.org")
     status, _headers, _body = Async { app.call(env) }.wait
 
     assert_equal 200, status
@@ -131,10 +131,10 @@ class TestMiddleware < Minitest::Test
 
   def test_trusted_host_middleware_blocks_invalid_host
     app = app_with_middleware do |api|
-      api.add_trusted_host(allowed_hosts: ['example.com'])
+      api.add_trusted_host(allowed_hosts: ["example.com"])
     end
 
-    env = Rack::MockRequest.env_for('/test', 'HTTP_HOST' => 'evil.com')
+    env = Rack::MockRequest.env_for("/test", "HTTP_HOST" => "evil.com")
     status, _headers, _body = Async { app.call(env) }.wait
 
     assert_equal 400, status
@@ -145,9 +145,9 @@ class TestMiddleware < Minitest::Test
       api.add_trusted_host(allowed_hosts: [])
     end
 
-    res = async_request(app, :get, '/test')
+    res = async_request(app, :get, "/test")
 
-    assert_equal '200', res.status.to_s
+    assert_equal "200", res.status.to_s
   end
 
   def test_trusted_host_middleware_with_regex
@@ -155,7 +155,7 @@ class TestMiddleware < Minitest::Test
       api.add_trusted_host(allowed_hosts: [/\.example\.com$/])
     end
 
-    env = Rack::MockRequest.env_for('/test', 'HTTP_HOST' => 'api.example.com')
+    env = Rack::MockRequest.env_for("/test", "HTTP_HOST" => "api.example.com")
     status, _headers, _body = Async { app.call(env) }.wait
 
     assert_equal 200, status
@@ -164,15 +164,15 @@ class TestMiddleware < Minitest::Test
   def test_cors_middleware_adds_headers
     app = app_with_middleware do |api|
       api.add_cors(
-        allow_origins: ['http://example.com'],
+        allow_origins: ["http://example.com"],
         allow_methods: %w[GET POST]
       )
     end
 
-    env = Rack::MockRequest.env_for('/test', 'HTTP_ORIGIN' => 'http://example.com')
+    env = Rack::MockRequest.env_for("/test", "HTTP_ORIGIN" => "http://example.com")
     _status, headers, _body = Async { app.call(env) }.wait
 
-    assert_equal 'http://example.com', headers['access-control-allow-origin']
+    assert_equal "http://example.com", headers["access-control-allow-origin"]
   end
 
   def test_request_logger_middleware
@@ -183,7 +183,7 @@ class TestMiddleware < Minitest::Test
       api.add_request_logger(logger: logger, level: :info)
     end
 
-    async_request(app, :get, '/test')
+    async_request(app, :get, "/test")
 
     log_content = logger_output.string
     assert_match(/GET/, log_content)
