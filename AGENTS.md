@@ -1,278 +1,346 @@
-# FunApi
+# FunApi - Agent Instructions
 
-A minimal, async-first Ruby web framework inspired by FastAPI. Built on top of Falcon and dry-schema, FunApi provides a simple, performant way to build web APIs in Ruby with a focus on developer experience.
+FunApi is a minimal, async-first Ruby web framework inspired by FastAPI. This file contains essential context for AI coding agents working on this project.
 
-## Philosophy
+## Project Overview
 
-FunApi aims to bring FastAPI's excellent developer experience to Ruby by providing:
+**Goal**: Bring FastAPI's excellent developer experience to Ruby with async-first architecture.
 
-- **Async-first**: Built on Ruby's Async library and Falcon server for high-performance concurrent operations
-- **Simple validation**: Using dry-schema for straightforward request validation
-- **Minimal magic**: Clear, explicit APIs without heavy DSLs
-- **Easy to start**: Get an API up and running in minutes
+**Core Philosophy**:
+- Async-first using Ruby's `Async` library and Falcon server
+- Simple validation with dry-schema
+- Minimal magic, clear explicit APIs
+- Automatic OpenAPI/Swagger documentation
+- Rack-compatible middleware system
 
-## Core Features
+**Target Ruby Version**: >= 3.2.0
 
-### 1. Async-First Request Handling
+## Setup Commands
 
-All route handlers receive the current `Async::Task` as the third parameter, enabling true concurrent execution within your routes:
+```bash
+# Install dependencies
+bundle install
 
+# Run tests
+bundle exec rake test
+
+# Run linter (Standard Ruby)
+bundle exec rake standard
+
+# Run linter with auto-fix
+bundle exec standardrb --fix
+
+# Run both tests and linting
+bundle exec rake
+```
+
+## Development Workflow
+
+### Running Examples
+
+```bash
+# Middleware demo (port 3000)
+ruby examples/middleware_demo.rb
+
+# OpenAPI demo (port 9292)
+ruby test/demo_openapi.rb
+
+# Middleware test demo
+ruby test/demo_middleware.rb
+```
+
+### Testing Changes
+
+1. Run examples to verify functionality manually
+2. Run `bundle exec rake test` to ensure tests pass
+3. Run `bundle exec rake standard` to check code style
+4. Check OpenAPI docs at `http://localhost:PORT/docs` when running examples
+
+## Code Style Guidelines
+
+**Linter**: Standard Ruby (standardrb)
+- Ruby version: 3.2 (configured in `.standard.yml`)
+- **IMPORTANT**: DO NOT add comments unless explicitly requested
+- Follow Standard Ruby formatting automatically
+
+**Conventions**:
+- Use frozen string literals: `# frozen_string_literal: true`
+- Prefer keyword arguments for options
+- Use Ruby 3+ pattern matching where appropriate
+- Keep methods focused and single-purpose
+- Use descriptive variable names (no abbreviations)
+
+**File Organization**:
+- Core framework: `lib/fun_api/`
+- Middleware: `lib/fun_api/middleware/`
+- OpenAPI: `lib/fun_api/openapi/`
+- Server adapters: `lib/fun_api/server/`
+- Examples: `examples/`
+- Tests/Demos: `test/`
+
+## Architecture Patterns
+
+### Route Handlers
+
+All route handlers receive three parameters:
 ```ruby
-# Routes receive: input, request, and async task
+api.get '/path' do |input, req, task|
+  # input: { path: {...}, query: {...}, body: {...} }
+  # req: Rack::Request object
+  # task: Async::Task for concurrent operations
+
+  [response_data, status_code]
+end
+```
+
+### Async Operations
+
+Use the `task` parameter for concurrent operations:
+```ruby
 api.get '/dashboard/:id' do |input, req, task|
-  user_id = input[:path]['id']
-  
-  # Use task to run operations concurrently
-  user_task = task.async { fetch_user_data(user_id) }
-  posts_task = task.async { fetch_user_posts(user_id) }
-  stats_task = task.async { fetch_user_stats(user_id) }
-  
-  # Wait for all to complete
+  user_task = task.async { fetch_user(id) }
+  posts_task = task.async { fetch_posts(id) }
+
   data = {
     user: user_task.wait,
-    posts: posts_task.wait,
-    stats: stats_task.wait
+    posts: posts_task.wait
   }
-  
-  [{ dashboard: data }, 200]
-end
 
-# Advanced concurrent operations with dependencies
-api.get '/profile/:id' do |input, req, task|
-  user_id = input[:path]['id']
-  
-  # Start fetching user first
-  user_task = task.async { fetch_user_data(user_id) }
-  user = user_task.wait
-  
-  # Then fetch dependent data concurrently
-  posts_task = task.async { fetch_user_posts(user[:id]) }
-  stats_task = task.async { fetch_user_stats(user[:id]) }
-  
-  [{ 
-    user: user,
-    posts: posts_task.wait,
-    stats: stats_task.wait
-  }, 200]
-end
-
-# Timeouts for slow operations
-api.get '/slow/:id' do |input, req, task|
-  begin
-    data = task.with_timeout(0.5) { slow_operation() }
-    [{ data: data }, 200]
-  rescue Async::TimeoutError
-    [{ error: 'Request timed out' }, 408]
-  end
+  [data, 200]
 end
 ```
 
-### 2. Request Validation
+### Validation Schemas
 
-FastAPI-style request validation using dry-schema:
-
+Use dry-schema for request validation:
 ```ruby
-# Define schemas with dry-schema
-UserCreateSchema = FunApi::Schema.define do
+MySchema = FunApi::Schema.define do
   required(:name).filled(:string)
-  required(:email).filled(:string)
-  required(:password).filled(:string)
   optional(:age).filled(:integer)
 end
 
-# Apply validation to routes
-app = FunApi::App.new do |api|
-  # Query param validation (GET/DELETE)
-  api.get '/hello', query: QuerySchema do |input, req, task|
-    name = input[:query][:name] || 'World'
-    [{ msg: "Hello, #{name}!" }, 200]
+# Apply to routes
+api.post '/users', body: MySchema do |input, req, task|
+  user = input[:body]  # Already validated
+  [user, 201]
+end
+```
+
+### Middleware
+
+Follow standard Rack middleware pattern:
+```ruby
+class MyMiddleware
+  def initialize(app)
+    @app = app
   end
 
-  # Body validation (POST/PUT/PATCH)
-  api.post '/users', body: UserCreateSchema do |input, req, task|
-    user = input[:body]
-    [{ created: user }, 201]
+  def call(env)
+    # Before request
+    status, headers, body = @app.call(env)
+    # After request
+    [status, headers, body]
   end
-  
-  # Array body validation
-  api.post '/users/batch', body: [UserCreateSchema] do |input, req, task|
-    users = input[:body].map { |u| create_user(u) }
-    [users, 201]
-  end
-  
-  # Path params are automatically extracted (no validation needed)
-  api.get '/users/:id' do |input, req, task|
-    user_id = input[:path]['id']  # Always a string
-    [{ user: fetch_user(user_id) }, 200]
+end
+
+# Use keyword arguments for options
+class ConfigurableMiddleware
+  def initialize(app, **options)
+    @app = app
+    @option = options[:option]
   end
 end
 ```
 
-### 3. Response Schema Validation & Filtering
+## Key Files and Their Purpose
 
-Automatically validate and filter response data, similar to FastAPI's `response_model`:
+- `lib/fun_api/application.rb` - Main App class, route registration, middleware system
+- `lib/fun_api/router.rb` - Route matching and path parameter extraction
+- `lib/fun_api/schema.rb` - Validation wrapper around dry-schema
+- `lib/fun_api/exceptions.rb` - HTTPException and ValidationError classes
+- `lib/fun_api/middleware/` - Built-in middleware (CORS, TrustedHost, RequestLogger)
+- `lib/fun_api/openapi/` - OpenAPI spec generation from routes and schemas
+- `lib/fun_api/server/falcon.rb` - Falcon server integration
 
+## Common Tasks
+
+### Adding a New Built-in Middleware
+
+1. Create file in `lib/fun_api/middleware/my_middleware.rb`
+2. Follow pattern:
+   ```ruby
+   module FunApi
+     module Middleware
+       class MyMiddleware
+         def initialize(app, **options)
+           @app = app
+           # Store options
+         end
+
+         def call(env)
+           # Middleware logic
+           @app.call(env)
+         end
+       end
+     end
+   end
+   ```
+3. Add convenience method to `lib/fun_api/application.rb`:
+   ```ruby
+   def add_my_middleware(**options)
+     require_relative 'middleware/my_middleware'
+     use FunApi::Middleware::MyMiddleware, **options
+   end
+   ```
+4. Require in `lib/fun_api/middleware.rb`
+5. Add example to `examples/middleware_demo.rb`
+6. Update README.md middleware section
+
+### Adding a New Route Helper
+
+1. Add method to `lib/fun_api/application.rb`
+2. Follow existing pattern (get, post, put, patch, delete)
+3. Use `add_route` internally with proper verb
+
+### Extending OpenAPI Generation
+
+1. Schema conversion: `lib/fun_api/openapi/schema_converter.rb`
+2. Spec generation: `lib/fun_api/openapi/spec_generator.rb`
+3. Test with `ruby test/demo_openapi.rb` and check `/docs`
+
+## Testing Instructions
+
+**Test Framework**: Minitest
+**Test Structure**: Flat (following Sidekiq pattern)
+**Current Status**: 90 tests, 217 assertions, all passing (~220ms)
+
+### Running Tests
+
+```bash
+# All tests
+bundle exec rake test
+
+# Single test file
+bundle exec ruby -Itest test/test_router.rb
+
+# Single test
+bundle exec ruby -Itest test/test_router.rb -n test_root_route_matches
+
+# Tests + linting
+bundle exec rake
+```
+
+### Test Files
+
+All tests live in `test/` (flat structure):
+- `test_fun_api.rb` - Basic smoke tests (10 tests)
+- `test_router.rb` - Router functionality (11 tests)
+- `test_schema.rb` - Schema validation (14 tests)
+- `test_middleware.rb` - Middleware chain (12 tests)
+- `test_validation.rb` - Request validation (14 tests)
+- `test_response_schema.rb` - Response filtering (9 tests)
+- `test_async.rb` - Async operations (10 tests)
+- `test_exceptions.rb` - Error handling (10 tests)
+
+### Writing Tests
+
+Follow existing patterns:
 ```ruby
-# Define output schema (without sensitive fields)
-UserOutputSchema = FunApi::Schema.define do
-  required(:id).filled(:integer)
-  required(:name).filled(:string)
-  required(:email).filled(:string)
-  optional(:age).filled(:integer)
-  # Note: password NOT included
-end
-
-app = FunApi::App.new do |api|
-  # Response schema filters out password field
-  api.post '/users', 
-    body: UserCreateSchema,
-    response_schema: UserOutputSchema do |input, req, task|
-      
-    # Handler returns full user with password
-    user = {
-      id: 1,
-      name: input[:body][:name],
-      email: input[:body][:email],
-      password: input[:body][:password],  # This will be filtered!
-      age: input[:body][:age]
-    }
-    
-    [user, 201]
-    # Client receives: { "id": 1, "name": "...", "email": "...", "age": ... }
-    # Password automatically removed by response_schema!
+class TestMyFeature < Minitest::Test
+  def async_request(app, method, path, **options)
+    Async do
+      Rack::MockRequest.new(app).send(method, path, **options)
+    end.wait
   end
-  
-  # Array responses also supported
-  api.get '/users',
-    response_schema: [UserOutputSchema] do |input, req, task|
-    users = fetch_all_users()  # Returns users with passwords
-    [users, 200]  # All passwords filtered from response
+
+  def test_something
+    app = FunApi::App.new do |api|
+      api.get '/test' do |input, req, task|
+        [{ message: 'test' }, 200]
+      end
+    end
+
+    res = async_request(app, :get, '/test')
+    assert_equal 200, res.status
   end
 end
 ```
 
-### 4. FastAPI-Style Error Handling
+### Test Coverage
 
-Validation errors return detailed, structured responses:
+✅ Router (path matching, parameters, 404s)
+✅ Schema validation (success, failure, errors, arrays)
+✅ Middleware (chain building, ordering, built-ins)
+✅ Request validation (query/body, error format)
+✅ Response schemas (filtering, arrays, nested)
+✅ Async operations (concurrency, timeouts, dependencies)
+✅ Exceptions (HTTPException, custom errors)
 
-```json
-{
-  "detail": [
-    {
-      "loc": ["body", "email"],
-      "msg": "is missing",
-      "type": "value_error"
-    }
-  ]
-}
-```
+### Manual Testing
 
-Custom exceptions with proper HTTP status codes:
+1. Run example apps in `examples/`
+2. Test with curl:
+   ```bash
+   curl http://localhost:3000/
+   curl -X POST http://localhost:3000/users \
+     -H 'Content-Type: application/json' \
+     -d '{"name":"Test","email":"test@example.com"}'
+   ```
+3. Check OpenAPI docs at `/docs`
+4. Verify middleware behavior (CORS headers, logging, etc.)
 
-```ruby
-raise FunApi::HTTPException.new(status_code: 404, detail: "User not found")
-raise FunApi::ValidationError.new(errors: schema_errors)
-```
+### Before Committing
 
-### 5. Input Structure
+- Run `bundle exec rake` (tests + linting)
+- Ensure all tests pass
+- Check no temporary files in project root
+- Update tests if adding new features
 
-All route handlers receive a unified `input` hash:
+## Security Considerations
 
-```ruby
-{
-  path: { id: "123" },           # Path parameters (strings)
-  query: { name: "John" },       # Query parameters (validated if schema provided)
-  body: { email: "..." }         # Request body (validated if schema provided)
-}
-```
+- **Sensitive Data**: Never log passwords, tokens, or API keys
+- **Response Schemas**: Use response_schema to filter sensitive fields from responses
+- **Trusted Host**: Always use `add_trusted_host` in production
+- **CORS**: Configure `add_cors` with specific origins, not `['*']` in production
+- **Validation**: Always validate user input with schemas
 
-## Architecture
+## Common Pitfalls
 
-- **Router**: Simple pattern-based routing with path parameter extraction
-- **Async Helpers**: Wrapper around Ruby's Async library for concurrent operations
-- **Schema**: Thin wrapper around dry-schema for validation
-- **Exceptions**: FastAPI-inspired exception classes with proper HTTP responses
-- **Server**: Falcon-based async HTTP server
+1. **Root Route Bug**: The router has special handling for `/` - don't change it
+2. **Keyword Arguments**: Middleware must accept `**options`, not positional args
+3. **Async Context**: Route handlers must be called within Async::Task context
+4. **Path Params**: Always strings in `input[:path]`, convert types manually
+5. **Response Format**: Must return `[data, status_code]` from handlers
+6. **Middleware Order**: First registered runs first (FIFO execution, LIFO wrapping)
 
 ## Dependencies
 
-- **rack** (>= 3.0.0): Web server interface
-- **async** (>= 2.8): Async/await and concurrency primitives
-- **dry-schema** (>= 1.13): Schema validation
-- **falcon** (>= 0.44): High-performance async HTTP server
+**Core**:
+- `async` (>= 2.8) - Async/concurrency primitives
+- `falcon` (>= 0.44) - Async HTTP server
+- `rack` (>= 3.0.0) - Web server interface
+- `dry-schema` (>= 1.13) - Validation
 
-## Example Application
+**Middleware**:
+- `rack-cors` (>= 2.0) - CORS support
 
-```ruby
-require 'fun_api'
-require 'fun_api/server/falcon'
+**Development**:
+- `standard` - Ruby style guide and linter
+- `minitest` - Testing framework
 
-# Define validation schemas
-UserCreateSchema = FunApi::Schema.define do
-  required(:name).filled(:string)
-  required(:email).filled(:string)
-end
 
-# Build the app
-app = FunApi::App.new do |api|
-  api.get '/users/:id' do |input, req, task|
-    user_id = input[:path]['id']
-    user = fetch_user(user_id)
-    [{ user: user }, 200]
-  end
+## Future Enhancements Roadmap
 
-  api.post '/users', body: UserCreateSchema do |input, req, task|
-    user = create_user(input[:body])
-    [{ user: user }, 201]
-  end
-  
-  # Concurrent operations using the async task
-  api.get '/dashboard/:id' do |input, req, task|
-    user_id = input[:path]['id']
-    
-    # Execute multiple operations concurrently
-    user_task = task.async { fetch_user(user_id) }
-    posts_task = task.async { fetch_posts(user_id) }
-    stats_task = task.async { fetch_stats(user_id) }
-    
-    data = {
-      user: user_task.wait,
-      posts: posts_task.wait,
-      stats: stats_task.wait
-    }
-    
-    [{ dashboard: data }, 200]
-  end
-end
+See `README.md` for full list. Key priorities:
+1. Dependency injection system (FastAPI's Depends)
+2. Background tasks
+3. Path parameter type validation
+4. WebSocket support
 
-# Start the server
-FunApi::Server::Falcon.start(app)
-```
+## Questions?
 
-## Design Goals
-
-1. **Performance**: Leverage Ruby's async capabilities for concurrent operations
-2. **Simplicity**: Minimal API surface, easy to learn
-3. **Explicitness**: No hidden magic, clear separation of concerns
-4. **Type Safety**: Validation at the edges using dry-schema
-5. **FastAPI-inspired**: Bring the best ideas from Python's FastAPI to Ruby
-
-## Current Status
-
-Early development. Core features implemented:
-- ✅ Async-first request handling with Async::Task
-- ✅ Route definition with path params
-- ✅ Request validation (body/query) with array support
-- ✅ Response schema validation and filtering
-- ✅ FastAPI-style error responses
-- ✅ Falcon server integration
-
-## Future Enhancements
-
-- Path parameter type validation
-- Middleware support
-- OpenAPI/Swagger documentation generation
-- Response schema options (exclude_unset, include, exclude)
-- Dependency injection system
-- WebSocket support
-- Content negotiation (JSON, XML, etc.)
+Check these resources:
+- `/examples` - Working demo applications
+- `/test` - Demo scripts showing features
+- `/.claude` - Implementation plans and notes
+- `README.md` - User-facing documentation

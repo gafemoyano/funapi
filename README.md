@@ -209,7 +209,67 @@ raise FunApi::HTTPException.new(status_code: 404, detail: "User not found")
 raise FunApi::ValidationError.new(errors: schema_errors)
 ```
 
-### 6. Input Structure
+### 6. Middleware Support
+
+FunApi supports both standard Rack middleware and provides FastAPI-style convenience methods for common use cases.
+
+#### Built-in Middleware
+
+```ruby
+app = FunApi::App.new do |api|
+  api.add_cors(
+    allow_origins: ['http://localhost:3000'],
+    allow_methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allow_headers: ['Content-Type', 'Authorization']
+  )
+  
+  api.add_request_logger
+  
+  api.add_trusted_host(
+    allowed_hosts: ['localhost', '127.0.0.1', /\.example\.com$/]
+  )
+  
+  api.add_gzip
+end
+```
+
+#### Using Standard Rack Middleware
+
+Any Rack middleware works out of the box:
+
+```ruby
+app = FunApi::App.new do |api|
+  api.use Rack::Attack
+  api.use Rack::ETag
+  api.use Rack::Session::Cookie, secret: 'your_secret'
+  
+  api.get '/protected' do |input, req, task|
+    [{ data: 'Protected resource' }, 200]
+  end
+end
+```
+
+#### Custom Middleware
+
+Create your own middleware following the Rack pattern:
+
+```ruby
+class MyCustomMiddleware
+  def initialize(app)
+    @app = app
+  end
+  
+  def call(env)
+    status, headers, body = @app.call(env)
+    headers['X-Custom-Header'] = 'my-value'
+    [status, headers, body]
+  end
+end
+
+app.use MyCustomMiddleware
+```
+
+### 7. Input Structure
 
 All route handlers receive a unified `input` hash:
 
@@ -251,6 +311,9 @@ app = FunApi::App.new(
   version: "1.0.0",
   description: "A simple user management API"
 ) do |api|
+  api.add_cors(allow_origins: ['*'])
+  api.add_request_logger
+  
   api.get '/users', query: QuerySchema, response_schema: [UserOutputSchema] do |input, req, task|
     users = [
       { id: 1, name: 'John Doe', email: 'john@example.com', age: 30 },
@@ -316,21 +379,22 @@ FunApi::Server::Falcon.start(app, port: 9292)
 
 ## Current Status
 
-Early development. Core features implemented:
+Active development. Core features implemented:
 - ✅ Async-first request handling with Async::Task
 - ✅ Route definition with path params
 - ✅ Request validation (body/query) with array support
 - ✅ Response schema validation and filtering
 - ✅ FastAPI-style error responses
 - ✅ Falcon server integration
-- ✅ **OpenAPI/Swagger documentation generation**
+- ✅ OpenAPI/Swagger documentation generation
+- ✅ Middleware support (Rack-compatible + convenience methods)
 
 ## Future Enhancements
 
 - Path parameter type validation
-- Middleware support
 - Response schema options (exclude_unset, include, exclude)
 - Dependency injection system
+- Background tasks
 - WebSocket support
 - Content negotiation (JSON, XML, etc.)
 
