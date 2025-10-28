@@ -53,8 +53,9 @@ module FunApi
                      raise ArgumentError, "Cannot resolve symbol dependency :#{dep} without container in context"
                    end
 
-                   raw = container.resolve(dep)
-                   extract_resource_and_cleanup_from_result(raw)
+                   wrapper = container.resolve(dep)
+                   resource = wrapper.call
+                   [resource, nil]
 
                  elsif dep.respond_to?(:call)
                    Depends.new(dep).call(context, cache)

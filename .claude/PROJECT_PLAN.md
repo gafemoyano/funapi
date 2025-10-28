@@ -12,7 +12,7 @@ FunApi aims to bring FastAPI's excellent developer experience to Ruby by providi
 - **Easy to start**: Get an API up and running in minutes
 - **Auto-documentation**: Automatic OpenAPI/Swagger documentation generation
 
-## Current Status (Updated 2024-10-26)
+## Current Status (Updated 2024-10-27)
 
 ### ✅ Production-Ready Features Implemented:
 
@@ -24,6 +24,14 @@ FunApi aims to bring FastAPI's excellent developer experience to Ruby by providi
 - ✅ FastAPI-style error responses
 - ✅ Falcon server integration
 
+**Dependency Injection** ⭐ NEW
+- ✅ Block-based dependencies with `ensure` cleanup
+- ✅ Request-scoped caching
+- ✅ Nested dependencies with `FunApi::Depends()`
+- ✅ Three patterns: simple, tuple, block (Ruby-idiomatic)
+- ✅ Automatic resource lifecycle (setup → use → cleanup)
+- ✅ FastAPI `Depends()` parity
+
 **Documentation**
 - ✅ OpenAPI/Swagger documentation generation
 - ✅ Automatic /docs and /openapi.json endpoints
@@ -32,54 +40,41 @@ FunApi aims to bring FastAPI's excellent developer experience to Ruby by providi
 **Middleware**
 - ✅ Rack-compatible middleware system
 - ✅ Built-in middleware (CORS, TrustedHost, RequestLogger, Gzip)
-- ✅ FastAPI-style convenience methods (add_cors, add_trusted_host, etc.)
+- ✅ FastAPI-style convenience methods
 - ✅ Full ecosystem support (rack-attack, rack-cache, etc.)
 
 **Testing**
-- ✅ Comprehensive test suite (90 tests, 217 assertions)
-- ✅ Router tests
-- ✅ Schema validation tests
-- ✅ Middleware tests
-- ✅ Async operation tests
-- ✅ Exception handling tests
-- ✅ Fast execution (~220ms)
+- ✅ Comprehensive test suite (121 tests, 281 assertions)
+- ✅ Router, schema, middleware, async, exceptions
+- ✅ Dependency injection (31 new tests)
+- ✅ Fast execution (~200ms)
 
 ### 📋 What to Tackle Next
 
-### Immediate Priority (Next Sprint)
+### Immediate Priority
 
-1. **Dependency Injection System** - FastAPI's killer feature
+1. **Background Tasks** - Post-response execution
+   - Fire-and-forget after response sent
+   - Email, logging, cleanup tasks
+   - Leverages async foundation
+   - Why: Common production pattern, natural async fit
 
-• `Depends()` equivalent for Ruby
-• Request-scoped dependencies
-• Nested dependencies
-• Enables clean auth patterns, database connections, shared services
+2. **Lifecycle Hooks** - Startup/shutdown
+   - App initialization/cleanup
+   - Exception handlers
+   - Why: Production deployment needs
 
-Why first: Core differentiator, enables advanced patterns, critical for FastAPI parity
+### Secondary Priority
 
-2. **Background Tasks** - Post-response execution
-
-• Fire-and-forget operations after response sent
-• Email sending, logging, cleanup
-• Leverages existing async foundation
-
-Why second: Common production need, natural fit with async architecture
-• Request-scoped dependencies
-• Nested dependencies
-• Makes testing clean
-
-Why second: Differentiates FunApi, enables auth patterns, critical for
-FastAPI parity
-
-### Secondary Priority (Following Sprints)
-
-3. Background Tasks - Leverage async foundation 4. Lifecycle Hooks -
-Startup/shutdown, exception handlers 5. File Uploads - Multipart handling 6.
-Path Parameter Types - Type coercion and validation
+3. **Path Parameter Types** - Type coercion/validation
+4. **File Uploads** - Multipart handling  
+5. **WebSocket Support** - Real-time connections
+6. **Global Dependencies** - Apply to all routes
+7. **Dependency Overrides** - Testing utilities
 
 ### Nice to Have
 
-• WebSocket support
-• Content negotiation
-• TestClient utilities
-• Security schemes
+- Content negotiation (JSON, XML, MessagePack)
+- TestClient utilities
+- Security schemes (OAuth2, JWT helpers)
+- Response streaming

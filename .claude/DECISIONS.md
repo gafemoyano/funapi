@@ -307,15 +307,70 @@ end
 
 ---
 
+## Dependency Injection (2024-10-27)
+
+### Decision: Block-Based Dependencies with Cleanup
+
+**Context**: Need DI with automatic resource cleanup. Evaluated: dry-system, tuples, context managers, blocks.
+
+**Decision**: Ruby blocks with `ensure` for lifecycle management.
+
+**Rationale**:
+- Most idiomatic Ruby (matches `File.open`, `Mutex.synchronize`)
+- `ensure` guarantees cleanup, even on errors
+- FastAPI parity (context managers)
+- Lightweight (uses Fiber, no heavy deps)
+
+**Pattern**:
+```ruby
+api.register(:db) do |provide|
+  conn = Database.connect
+  provide.call(conn)
+ensure
+  conn.close
+end
+
+api.get '/users', depends: [:db] do |input, req, task, db:|
+  [db.all_users, 200]
+end
+```
+
+**Features**:
+- Request-scoped caching
+- Nested dependencies with `FunApi::Depends()`
+- Three patterns: simple, tuple (compat), block (preferred)
+- Cleanup in `ensure` after response sent
+
+**Result**: 121 tests passing, FastAPI-aligned.
+
+---
+
+## Dependency Injection: Not dry-system (2024-10-27)
+
+### Decision: Custom Lightweight DI
+
+**Context**: dry-system exists but designed for different use case.
+
+**Decision**: Build custom DI using only dry-container.
+
+**Rationale**:
+- dry-system = constructor injection, we need parameter injection
+- FunApi is minimal, dry-system is comprehensive
+- Custom solution maps 1:1 to FastAPI's `Depends()`
+
+**Used**: dry-container (registry only)
+**Skipped**: dry-system, dry-auto_inject, dry-effects
+
+---
+
 ## Future Decisions Pending
 
-These are under consideration:
-
-1. **Dependency Injection**: How to implement FastAPI's `Depends()` pattern?
-2. **Background Tasks**: Post-response task execution strategy
-3. **Path Parameter Types**: Should we validate/coerce path params?
-4. **WebSocket Support**: Integration with async architecture
-5. **Content Negotiation**: JSON by default, how to add XML/MessagePack?
+1. ~~**Dependency Injection**~~ ✅ Done
+2. **Background Tasks**: Post-response execution
+3. **Path Parameter Types**: Type coercion/validation
+4. **WebSocket Support**: Async integration
+5. **Content Negotiation**: JSON + others
+6. **Global Dependencies**: Apply to all routes
 
 ---
 
@@ -337,5 +392,6 @@ These are under consideration:
 
 ## Change Log
 
-- 2024-10-26: Added testing strategy, middleware decisions, documentation strategy
-- 2024-09: Initial decisions for core framework
+- 2024-10-27: Added dependency injection decisions
+- 2024-10-26: Testing, middleware, documentation strategies
+- 2024-09: Initial core framework decisions

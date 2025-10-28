@@ -203,15 +203,15 @@ class TestDependencyCleanup < Minitest::Test
     inner_cleanup_called = false
 
     app = FunApi::App.new do |api|
-      api.register(:inner) do
-        [
-          'inner_resource',
-          -> { inner_cleanup_called = true }
-        ]
+      api.register(:inner) do |provide|
+        provide.call('inner_resource')
+      ensure
+        inner_cleanup_called = true
       end
 
       api.get '/test',
               depends: {
+                inner: :inner,
                 outer: FunApi::Depends(
                   lambda { |inner:|
                     [
@@ -221,8 +221,8 @@ class TestDependencyCleanup < Minitest::Test
                   },
                   inner: :inner
                 )
-              } do |_input, _req, _task, outer:|
-        [{ value: outer }, 200]
+              } do |_input, _req, _task, inner:, outer:|
+        [{ value: outer, inner: inner }, 200]
       end
     end
 
@@ -231,7 +231,7 @@ class TestDependencyCleanup < Minitest::Test
     data = JSON.parse(res.body, symbolize_names: true)
     assert_equal 'outer_inner_resource', data[:value]
 
-    assert inner_cleanup_called, 'Inner cleanup should be called'
+    assert inner_cleanup_called, 'Inner cleanup should be called (resolved at route level)'
     assert outer_cleanup_called, 'Outer cleanup should be called'
   end
 end

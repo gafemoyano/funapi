@@ -10,6 +10,7 @@ require_relative 'async'
 require_relative 'exceptions'
 require_relative 'schema'
 require_relative 'depends'
+require_relative 'dependency_wrapper'
 require_relative 'openapi/spec_generator'
 
 module FunApi
@@ -32,7 +33,18 @@ module FunApi
     end
 
     def register(key, &block)
-      @container.register(key, &block)
+      @container.register(key) do
+        if block.arity == 0
+          result = block.call
+          if result.is_a?(Array) && result.length == 2 && result[1].respond_to?(:call)
+            ManagedDependency.new(result[0], result[1])
+          else
+            SimpleDependency.new(result)
+          end
+        else
+          BlockDependency.new(block)
+        end
+      end
     end
 
     def resolve(key)
@@ -153,7 +165,7 @@ module FunApi
     def handle_async_route(req, path_params, body_schema, query_schema, response_schema, dependencies, &blk)
       current_task = Async::Task.current
       Fiber[:async_task] = current_task
-      cleanup_procs = []
+      cleanup_objects = []
 
       begin
         input = {
@@ -166,7 +178,7 @@ module FunApi
 
         input[:body] = Schema.validate(body_schema, input[:body], location: 'body') if body_schema
 
-        resolved_deps, cleanup_procs = resolve_dependencies(dependencies, input, req, current_task)
+        resolved_deps, cleanup_objects = resolve_dependencies(dependencies, input, req, current_task)
 
         payload, status = blk.call(input, req, current_task, **resolved_deps)
 
@@ -184,8 +196,8 @@ module FunApi
       rescue HTTPException => e
         e.to_response
       ensure
-        cleanup_procs.each do |cleanup|
-          cleanup.call
+        cleanup_objects.each do |wrapper|
+          wrapper.cleanup
         rescue StandardError => e
           warn "Dependency cleanup failed: #{e.message}"
         end
@@ -356,19 +368,11 @@ module FunApi
       normalized
     end
 
-    def extract_resource_and_cleanup(result)
-      if result.is_a?(Array) && result.length == 2 && result[1].respond_to?(:call)
-        [result[0], result[1]]
-      else
-        [result, nil]
-      end
-    end
-
     def resolve_dependencies(dependencies, input, req, task)
       return [{}, []] if dependencies.nil? || dependencies.empty?
 
       cache = {}
-      cleanup_procs = []
+      cleanup_objects = []
 
       context = {
         input: input,
@@ -384,20 +388,20 @@ module FunApi
           if cache.key?(cache_key)
             cache[cache_key][:resource]
           else
-            raw_result = @container.resolve(dep_info[:key])
-            resource, cleanup = extract_resource_and_cleanup(raw_result)
-            cache[cache_key] = { resource: resource, cleanup: cleanup }
-            cleanup_procs << cleanup if cleanup
+            dependency_wrapper = @container.resolve(dep_info[:key])
+            resource = dependency_wrapper.call
+            cache[cache_key] = { resource: resource, wrapper: dependency_wrapper }
+            cleanup_objects << dependency_wrapper
             resource
           end
         when :depends
           result, cleanup = dep_info[:callable].call(context, cache)
-          cleanup_procs << cleanup if cleanup
+          cleanup_objects << ManagedDependency.new(result, cleanup) if cleanup
           result
         end
       end
 
-      [resolved, cleanup_procs]
+      [resolved, cleanup_objects]
     rescue StandardError => e
       raise HTTPException.new(
         status_code: 500,
