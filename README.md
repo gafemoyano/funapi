@@ -281,6 +281,88 @@ All route handlers receive a unified `input` hash:
 }
 ```
 
+### 8. Background Tasks
+
+Execute tasks after the response is sent, perfect for emails, logging, and webhooks:
+
+```ruby
+api.post '/signup', body: UserSchema do |input, req, task, background:|
+  user = create_user(input[:body])
+  
+  # Tasks execute AFTER response is sent but BEFORE dependencies close
+  background.add_task(method(:send_welcome_email), user[:email])
+  background.add_task(method(:log_signup_event), user[:id])
+  background.add_task(method(:notify_admin), user)
+  
+  [{ user: user, message: 'Signup successful!' }, 201]
+end
+```
+
+**Key Benefits:**
+- ✅ Response sent immediately to client
+- ✅ Tasks run after handler completes
+- ✅ Dependencies still available to tasks
+- ✅ Multiple tasks execute in order
+- ✅ Errors are handled gracefully
+
+**Perfect for:**
+- Email notifications
+- Logging and analytics
+- Cache warming
+- Simple webhook calls
+- Audit trail recording
+
+**Not for:**
+- Long-running jobs (> 30 seconds)
+- Jobs requiring persistence/retries
+- Jobs that must survive server restart
+→ Use Sidekiq, GoodJob, or Que for these cases
+
+**With callable objects:**
+
+```ruby
+# Lambda
+background.add_task(->(email) { send_email(email) }, user[:email])
+
+# Proc
+background.add_task(proc { |id| log_event(id) }, user[:id])
+
+# Method reference
+background.add_task(method(:send_email), user[:email])
+```
+
+**With arguments:**
+
+```ruby
+# Positional arguments
+background.add_task(->(a, b) { sum(a, b) }, 5, 3)
+
+# Keyword arguments
+background.add_task(->(name:, age:) { greet(name, age) }, name: 'Alice', age: 30)
+
+# Mixed
+background.add_task(->(msg, to:) { send(msg, to) }, 'Hello', to: 'user@example.com')
+```
+
+**Access dependencies in background tasks:**
+
+```ruby
+api.register(:mailer) { Mailer.new }
+api.register(:logger) { Logger.new }
+
+api.post '/signup', depends: [:mailer, :logger] do |input, req, task, mailer:, logger:, background:|
+  user = create_user(input[:body])
+  
+  # Dependencies captured in closure, available to background tasks
+  background.add_task(lambda {
+    mailer.send_welcome(user[:email])
+    logger.info("Welcome email sent to #{user[:email]}")
+  })
+  
+  [{ user: user }, 201]
+end
+```
+
 ## Complete Example
 
 ```ruby
@@ -388,15 +470,18 @@ Active development. Core features implemented:
 - ✅ Falcon server integration
 - ✅ OpenAPI/Swagger documentation generation
 - ✅ Middleware support (Rack-compatible + convenience methods)
+- ✅ Dependency injection with cleanup
+- ✅ Background tasks (post-response execution)
 
 ## Future Enhancements
 
+- ~~Dependency injection system~~ ✅ Implemented
+- ~~Background tasks~~ ✅ Implemented
 - Path parameter type validation
 - Response schema options (exclude_unset, include, exclude)
-- Dependency injection system
-- Background tasks
 - WebSocket support
 - Content negotiation (JSON, XML, etc.)
+- Lifecycle hooks (startup/shutdown)
 
 ## Development
 

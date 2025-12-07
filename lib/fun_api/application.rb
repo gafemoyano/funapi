@@ -11,6 +11,7 @@ require_relative 'exceptions'
 require_relative 'schema'
 require_relative 'depends'
 require_relative 'dependency_wrapper'
+require_relative 'background_tasks'
 require_relative 'openapi/spec_generator'
 
 module FunApi
@@ -166,6 +167,7 @@ module FunApi
       current_task = Async::Task.current
       Fiber[:async_task] = current_task
       cleanup_objects = []
+      background_tasks = BackgroundTasks.new(current_task)
 
       begin
         input = {
@@ -180,11 +182,16 @@ module FunApi
 
         resolved_deps, cleanup_objects = resolve_dependencies(dependencies, input, req, current_task)
 
+        handler_params = blk.parameters.select { |type, _name| %i[keyreq key].include?(type) }.map(&:last)
+        resolved_deps[:background] = background_tasks if handler_params.include?(:background)
+
         payload, status = blk.call(input, req, current_task, **resolved_deps)
 
         payload = normalize_payload(payload)
 
         payload = Schema.validate_response(response_schema, payload) if response_schema
+
+        background_tasks.execute
 
         [
           status || 200,
