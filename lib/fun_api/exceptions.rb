@@ -60,4 +60,13 @@ module FunApi
       end
     end
   end
+
+  class TemplateNotFoundError < StandardError
+    attr_reader :template_name
+
+    def initialize(template_name)
+      @template_name = template_name
+      super("Template not found: #{template_name}")
+    end
+  end
 end

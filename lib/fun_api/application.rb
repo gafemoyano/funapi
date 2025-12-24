@@ -12,6 +12,7 @@ require_relative 'schema'
 require_relative 'depends'
 require_relative 'dependency_wrapper'
 require_relative 'background_tasks'
+require_relative 'template_response'
 require_relative 'openapi/spec_generator'
 
 module FunApi
@@ -187,6 +188,11 @@ module FunApi
 
         payload, status = blk.call(input, req, current_task, **resolved_deps)
 
+        if payload.is_a?(TemplateResponse)
+          background_tasks.execute
+          return payload.to_response
+        end
+
         payload = normalize_payload(payload)
 
         payload = Schema.validate_response(response_schema, payload) if response_schema
@@ -195,7 +201,7 @@ module FunApi
 
         [
           status || 200,
-          { 'content-type' => 'application/json' },
+          {"content-type" => "application/json"},
           [JSON.dump(payload)]
         ]
       rescue ValidationError => e

@@ -1,0 +1,6 @@
+<h1>Items List</h1>
+<ul id="items">
+<% items.each do |item| -%>
+<%= render_partial('items/_item.html.erb', item: item) %>
+<% end -%>
+</ul>

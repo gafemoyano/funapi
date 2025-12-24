@@ -1,0 +1,12 @@
+<form class="todo-form" hx-post="/todos" hx-target="#todo-list" hx-swap="beforeend" hx-on::after-request="this.reset()">
+  <input type="text" name="title" placeholder="What needs to be done?" required>
+  <button type="submit">Add</button>
+</form>
+
+<ul id="todo-list" class="todo-list">
+<% todos.each do |todo| -%>
+<%= render_partial("todos/_todo.html.erb", todo: todo) %>
+<% end -%>
+</ul>
+
+<p><small>Powered by FunApi + HTMX</small></p>

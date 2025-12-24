@@ -1,0 +1,15 @@
+<li id="todo-<%= todo[:id] %>" class="todo-item<%= " completed" if todo[:completed] %>">
+  <span><%= todo[:title] %></span>
+  <button class="btn-toggle"
+          hx-patch="/todos/<%= todo[:id] %>/toggle"
+          hx-target="#todo-<%= todo[:id] %>"
+          hx-swap="outerHTML">
+    <%= todo[:completed] ? "Undo" : "Done" %>
+  </button>
+  <button class="btn-delete"
+          hx-delete="/todos/<%= todo[:id] %>"
+          hx-target="#todo-<%= todo[:id] %>"
+          hx-swap="outerHTML">
+    Delete
+  </button>
+</li>

@@ -363,6 +363,110 @@ api.post '/signup', depends: [:mailer, :logger] do |input, req, task, mailer:, l
 end
 ```
 
+### 9. Template Rendering
+
+Render ERB templates for HTML responses, perfect for HTMX-style applications:
+
+```ruby
+require 'fun_api'
+require 'fun_api/templates'
+
+templates = FunApi::Templates.new(directory: 'templates')
+
+app = FunApi::App.new do |api|
+  api.get '/' do |input, req, task|
+    templates.response('index.html.erb', title: 'Home', message: 'Welcome!')
+  end
+
+  api.get '/users/:id' do |input, req, task|
+    user = fetch_user(input[:path]['id'])
+    templates.response('user.html.erb', user: user)
+  end
+end
+```
+
+#### Layouts
+
+Use layouts to wrap your templates with common HTML structure:
+
+```ruby
+templates = FunApi::Templates.new(
+  directory: 'templates',
+  layout: 'layouts/application.html.erb'
+)
+
+api.get '/' do |input, req, task|
+  templates.response('home.html.erb', title: 'Home')
+end
+
+# Disable layout for partials/HTMX responses
+api.post '/items' do |input, req, task|
+  item = create_item(input[:body])
+  templates.response('items/_item.html.erb', layout: false, item: item, status: 201)
+end
+```
+
+Layout template with `yield_content`:
+
+```erb
+<!-- templates/layouts/application.html.erb -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title><%= title %></title>
+</head>
+<body>
+  <%= yield_content %>
+</body>
+</html>
+```
+
+#### Partials
+
+Render partials within templates using `render_partial`:
+
+```erb
+<!-- templates/items/index.html.erb -->
+<ul>
+<% items.each do |item| %>
+  <%= render_partial('items/_item.html.erb', item: item) %>
+<% end %>
+</ul>
+```
+
+#### With HTMX
+
+FunApi templates work great with HTMX for dynamic HTML updates:
+
+```ruby
+api.get '/items' do |input, req, task|
+  items = fetch_items
+  templates.response('items/index.html.erb', items: items)
+end
+
+api.post '/items', body: ItemSchema do |input, req, task|
+  item = create_item(input[:body])
+  # Return partial for HTMX to insert
+  templates.response('items/_item.html.erb', layout: false, item: item, status: 201)
+end
+
+api.delete '/items/:id' do |input, req, task|
+  delete_item(input[:path]['id'])
+  # Return empty response for HTMX delete
+  FunApi::TemplateResponse.new('')
+end
+```
+
+```erb
+<!-- With HTMX attributes -->
+<form hx-post="/items" hx-target="#items" hx-swap="beforeend">
+  <input name="title" placeholder="New item">
+  <button type="submit">Add</button>
+</form>
+```
+
+See `examples/templates_demo.rb` for a complete HTMX todo app example.
+
 ## Complete Example
 
 ```ruby
@@ -472,11 +576,13 @@ Active development. Core features implemented:
 - ✅ Middleware support (Rack-compatible + convenience methods)
 - ✅ Dependency injection with cleanup
 - ✅ Background tasks (post-response execution)
+- ✅ Template rendering (ERB with layouts and partials)
 
 ## Future Enhancements
 
 - ~~Dependency injection system~~ ✅ Implemented
 - ~~Background tasks~~ ✅ Implemented
+- ~~Template rendering~~ ✅ Implemented
 - Path parameter type validation
 - Response schema options (exclude_unset, include, exclude)
 - WebSocket support
