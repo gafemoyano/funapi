@@ -351,4 +351,67 @@ class TestTemplates < Minitest::Test
     assert_includes html1, "Hello, No Layout!"
     assert_includes html2, "Hello, With Layout!"
   end
+
+  def test_with_layout_returns_scoped_templates
+    scoped = @templates.with_layout("layouts/application.html.erb")
+
+    assert_instance_of FunApi::ScopedTemplates, scoped
+  end
+
+  def test_with_layout_uses_specified_layout
+    scoped = @templates.with_layout("layouts/application.html.erb")
+    html = scoped.render("hello.html.erb", name: "Scoped", title: "Test")
+
+    assert_includes html, "<!DOCTYPE html>"
+    assert_includes html, "<title>Test</title>"
+    assert_includes html, "Hello, Scoped!"
+  end
+
+  def test_with_layout_response
+    scoped = @templates.with_layout("layouts/application.html.erb")
+    response = scoped.response("hello.html.erb", name: "Scoped", title: "Test")
+
+    assert_instance_of FunApi::TemplateResponse, response
+    assert_includes response.body, "<!DOCTYPE html>"
+    assert_includes response.body, "Hello, Scoped!"
+  end
+
+  def test_with_layout_can_override_layout
+    scoped = @templates.with_layout("layouts/application.html.erb")
+    html = scoped.render("hello.html.erb", layout: "layouts/admin.html.erb", name: "Admin", title: "Admin")
+
+    assert_includes html, "Admin Layout"
+    refute_includes html, "My App Footer"
+  end
+
+  def test_with_layout_can_disable_layout
+    scoped = @templates.with_layout("layouts/application.html.erb")
+    html = scoped.render("hello.html.erb", layout: false, name: "No Layout")
+
+    refute_includes html, "<!DOCTYPE html>"
+    assert_includes html, "Hello, No Layout!"
+  end
+
+  def test_with_layout_render_partial
+    scoped = @templates.with_layout("layouts/application.html.erb")
+    html = scoped.render_partial("_item.html.erb", item: {name: "Partial"})
+
+    refute_includes html, "<!DOCTYPE html>"
+    assert_includes html, "Partial"
+  end
+
+  def test_with_layout_integration
+    admin_templates = @templates.with_layout("layouts/admin.html.erb")
+
+    app = FunApi::App.new do |api|
+      api.get "/admin" do |_input, _req, _task|
+        admin_templates.response("hello.html.erb", name: "Admin Page", title: "Admin")
+      end
+    end
+
+    res = async_request(app, :get, "/admin")
+    assert_equal 200, res.status
+    assert_includes res.body, "Admin Layout"
+    assert_includes res.body, "Hello, Admin Page!"
+  end
 end

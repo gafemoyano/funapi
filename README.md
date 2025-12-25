@@ -406,6 +406,24 @@ api.post '/items' do |input, req, task|
 end
 ```
 
+Use `with_layout` to create a scoped templates object for route groups:
+
+```ruby
+templates = FunApi::Templates.new(directory: 'templates')
+
+# Create scoped templates for different sections
+public_templates = templates.with_layout('layouts/public.html.erb')
+admin_templates = templates.with_layout('layouts/admin.html.erb')
+
+api.get '/' do |input, req, task|
+  public_templates.response('home.html.erb', title: 'Home')
+end
+
+api.get '/admin' do |input, req, task|
+  admin_templates.response('admin/dashboard.html.erb', title: 'Dashboard')
+end
+```
+
 Layout template with `yield_content`:
 
 ```erb

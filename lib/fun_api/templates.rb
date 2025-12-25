@@ -13,6 +13,10 @@ module FunApi
       @cache = {}
     end
 
+    def with_layout(layout)
+      ScopedTemplates.new(self, layout)
+    end
+
     def render(name, layout: nil, **context)
       content = render_template(name, **context)
 
@@ -80,6 +84,27 @@ module FunApi
 
     def get_binding
       binding
+    end
+  end
+
+  class ScopedTemplates
+    def initialize(templates, layout)
+      @templates = templates
+      @layout = layout
+    end
+
+    def render(name, layout: nil, **context)
+      effective_layout = layout.nil? ? @layout : layout
+      @templates.render(name, layout: effective_layout, **context)
+    end
+
+    def response(name, status: 200, headers: {}, layout: nil, **context)
+      effective_layout = layout.nil? ? @layout : layout
+      @templates.response(name, status: status, headers: headers, layout: effective_layout, **context)
+    end
+
+    def render_partial(name, **context)
+      @templates.render_partial(name, **context)
     end
   end
 end
