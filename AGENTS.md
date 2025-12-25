@@ -152,12 +152,57 @@ class ConfigurableMiddleware
 end
 ```
 
+### Template Rendering
+
+Return `TemplateResponse` for HTML instead of JSON:
+```ruby
+require 'fun_api/templates'
+
+templates = FunApi::Templates.new(
+  directory: 'templates',
+  layout: 'layouts/application.html.erb'  # optional default layout
+)
+
+api.get '/' do |input, req, task|
+  templates.response('home.html.erb', title: 'Home', user: current_user)
+end
+
+# Disable layout for HTMX partials
+api.post '/items' do |input, req, task|
+  templates.response('_item.html.erb', layout: false, item: item, status: 201)
+end
+
+# Use with_layout for route groups
+admin = templates.with_layout('layouts/admin.html.erb')
+api.get '/admin' do |input, req, task|
+  admin.response('dashboard.html.erb', title: 'Admin')
+end
+```
+
+**Layout templates** use `yield_content`:
+```erb
+<!DOCTYPE html>
+<html>
+<head><title><%= title %></title></head>
+<body><%= yield_content %></body>
+</html>
+```
+
+**Partials** via `render_partial`:
+```erb
+<% items.each do |item| %>
+  <%= render_partial('_item.html.erb', item: item) %>
+<% end %>
+```
+
 ## Key Files and Their Purpose
 
 - `lib/fun_api/application.rb` - Main App class, route registration, middleware system
 - `lib/fun_api/router.rb` - Route matching and path parameter extraction
 - `lib/fun_api/schema.rb` - Validation wrapper around dry-schema
-- `lib/fun_api/exceptions.rb` - HTTPException and ValidationError classes
+- `lib/fun_api/exceptions.rb` - HTTPException, ValidationError, TemplateNotFoundError
+- `lib/fun_api/templates.rb` - ERB template rendering with layouts/partials
+- `lib/fun_api/template_response.rb` - HTML response wrapper
 - `lib/fun_api/middleware/` - Built-in middleware (CORS, TrustedHost, RequestLogger)
 - `lib/fun_api/openapi/` - OpenAPI spec generation from routes and schemas
 - `lib/fun_api/server/falcon.rb` - Falcon server integration
@@ -212,7 +257,7 @@ end
 
 **Test Framework**: Minitest
 **Test Structure**: Flat (following Sidekiq pattern)
-**Current Status**: 90 tests, 217 assertions, all passing (~220ms)
+**Current Status**: 174 tests, 487 assertions, all passing (~220ms)
 
 ### Running Tests
 
@@ -241,6 +286,7 @@ All tests live in `test/` (flat structure):
 - `test_response_schema.rb` - Response filtering (9 tests)
 - `test_async.rb` - Async operations (10 tests)
 - `test_exceptions.rb` - Error handling (10 tests)
+- `test_templates.rb` - Template rendering (37 tests)
 
 ### Writing Tests
 
@@ -275,6 +321,7 @@ end
 ✅ Response schemas (filtering, arrays, nested)
 ✅ Async operations (concurrency, timeouts, dependencies)
 ✅ Exceptions (HTTPException, custom errors)
+✅ Templates (rendering, layouts, partials, with_layout)
 
 ### Manual Testing
 
@@ -332,10 +379,12 @@ end
 ## Future Enhancements Roadmap
 
 See `README.md` for full list. Key priorities:
-1. Dependency injection system (FastAPI's Depends)
-2. Background tasks
-3. Path parameter type validation
-4. WebSocket support
+1. ~~Dependency injection system~~ ✅ Done
+2. ~~Background tasks~~ ✅ Done
+3. ~~Template rendering~~ ✅ Done
+4. Path parameter type validation
+5. WebSocket support
+6. Lifecycle hooks (startup/shutdown)
 
 ## Questions?
 
