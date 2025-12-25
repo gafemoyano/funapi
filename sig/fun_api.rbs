@@ -1,4 +1,499 @@
+# Type definitions for FunApi
+# A minimal, async-first Ruby web framework inspired by FastAPI
+
 module FunApi
   VERSION: String
-  # See the writing guide of rbs: https://github.com/ruby/rbs#guides
+
+  # Base error class for FunApi
+  class Error < StandardError
+  end
+
+  # Type aliases for common patterns
+  # Using permissive types for third-party integrations
+
+  # Rack environment hash
+  type rack_env = Hash[String, untyped]
+
+  # Standard Rack response: [status, headers, body]
+  type rack_response = [Integer, Hash[String, String], Array[String]]
+
+  # Route handler input hash with path params, query params, and body
+  type route_input = {
+    path: Hash[String, String],
+    query: Hash[Symbol, untyped],
+    body: untyped
+  }
+
+  # Route handler return value: [data, status_code]
+  type handler_return = [untyped, Integer]
+
+  # OpenAPI configuration
+  type openapi_config = {
+    title: String,
+    version: String,
+    description: String
+  }
+
+  # Dependency specification: array of symbols or hash mapping names to dependencies
+  type depends_spec = Array[Symbol] | Hash[Symbol, untyped] | nil
+
+  # The main application class - entry point for FunApi
+  #
+  # Example:
+  #   app = FunApi::App.new(title: "My API") do |api|
+  #     api.get '/hello' do |input, req, task|
+  #       [{ message: 'Hello!' }, 200]
+  #     end
+  #   end
+  #
+  class App
+    attr_reader openapi_config: openapi_config
+    attr_reader container: untyped
+    attr_reader startup_hooks: Array[^() -> void]
+    attr_reader shutdown_hooks: Array[^() -> void]
+
+    # Create a new FunApi application
+    #
+    # @param title OpenAPI documentation title
+    # @param version API version string
+    # @param description API description for OpenAPI docs
+    # @yield [api] Configuration block receiving the app instance
+    def initialize: (?title: String, ?version: String, ?description: String) ?{ (App) -> void } -> void
+
+    # Register a startup hook to run before the server accepts requests
+    #
+    # Example:
+    #   api.on_startup { DB.connect }
+    def on_startup: () { () -> void } -> self
+
+    # Register a shutdown hook to run when the server stops
+    #
+    # Example:
+    #   api.on_shutdown { DB.disconnect }
+    def on_shutdown: () { () -> void } -> self
+
+    # Run all registered startup hooks
+    def run_startup_hooks: () -> void
+
+    # Run all registered shutdown hooks (errors are logged but don't stop other hooks)
+    def run_shutdown_hooks: () -> void
+
+    # Register a dependency in the container
+    #
+    # Example:
+    #   api.register(:db) { Database.new }
+    #   api.register(:logger) { Logger.new(STDOUT) }
+    def register: (Symbol key) { () -> untyped } -> void
+
+    # Resolve a dependency from the container
+    def resolve: (Symbol key) -> untyped
+
+    # Define a GET route
+    #
+    # @param path URL path pattern (e.g., '/users/:id')
+    # @param query Optional query parameter schema
+    # @param response_schema Optional response validation schema
+    # @param depends Dependencies to inject into the handler
+    # @yield [input, req, task] Route handler block
+    def get: (
+      String path,
+      ?query: untyped,
+      ?response_schema: untyped,
+      ?depends: depends_spec
+    ) { (route_input, untyped, untyped, **untyped) -> (handler_return | TemplateResponse) } -> void
+
+    # Define a POST route
+    #
+    # @param path URL path pattern
+    # @param body Optional request body schema
+    # @param query Optional query parameter schema
+    # @param response_schema Optional response validation schema
+    # @param depends Dependencies to inject into the handler
+    # @yield [input, req, task] Route handler block
+    def post: (
+      String path,
+      ?body: untyped,
+      ?query: untyped,
+      ?response_schema: untyped,
+      ?depends: depends_spec
+    ) { (route_input, untyped, untyped, **untyped) -> (handler_return | TemplateResponse) } -> void
+
+    # Define a PUT route
+    def put: (
+      String path,
+      ?body: untyped,
+      ?query: untyped,
+      ?response_schema: untyped,
+      ?depends: depends_spec
+    ) { (route_input, untyped, untyped, **untyped) -> (handler_return | TemplateResponse) } -> void
+
+    # Define a PATCH route
+    def patch: (
+      String path,
+      ?body: untyped,
+      ?query: untyped,
+      ?response_schema: untyped,
+      ?depends: depends_spec
+    ) { (route_input, untyped, untyped, **untyped) -> (handler_return | TemplateResponse) } -> void
+
+    # Define a DELETE route
+    def delete: (
+      String path,
+      ?query: untyped,
+      ?response_schema: untyped,
+      ?depends: depends_spec
+    ) { (route_input, untyped, untyped, **untyped) -> (handler_return | TemplateResponse) } -> void
+
+    # Add Rack middleware to the stack
+    #
+    # Example:
+    #   api.use Rack::Session::Cookie, secret: 'key'
+    def use: (Class middleware, *untyped args) ?{ () -> void } -> self
+
+    # Add CORS middleware with sensible defaults
+    #
+    # Example:
+    #   api.add_cors(allow_origins: ['http://localhost:3000'])
+    def add_cors: (
+      ?allow_origins: Array[String],
+      ?allow_methods: Array[String],
+      ?allow_headers: Array[String],
+      ?expose_headers: Array[String],
+      ?max_age: Integer,
+      ?allow_credentials: bool
+    ) -> void
+
+    # Add trusted host validation middleware
+    #
+    # Example:
+    #   api.add_trusted_host(allowed_hosts: ['example.com', /\.example\.com$/])
+    def add_trusted_host: (allowed_hosts: Array[String | Regexp]) -> void
+
+    # Add request logging middleware
+    def add_request_logger: (?logger: untyped, ?level: Symbol) -> void
+
+    # Add gzip compression for JSON responses
+    def add_gzip: () -> void
+
+    # Rack interface - called by the web server
+    def call: (rack_env env) -> rack_response
+  end
+
+  # Schema validation using dry-schema
+  #
+  # Example:
+  #   UserSchema = FunApi::Schema.define do
+  #     required(:name).filled(:string)
+  #     required(:email).filled(:string)
+  #   end
+  #
+  class Schema
+    # Define a new validation schema using dry-schema DSL
+    #
+    # Returns a Dry::Schema::Params object
+    def self.define: () { () -> void } -> untyped
+
+    # Validate data against a schema, raising ValidationError on failure
+    #
+    # @param schema The schema to validate against (or array with single schema for arrays)
+    # @param data The data to validate
+    # @param location Error location prefix ('body', 'query')
+    # @return Validated and coerced data
+    def self.validate: (untyped schema, untyped data, ?location: String) -> untyped
+
+    # Validate response data, raising HTTPException on failure
+    def self.validate_response: (untyped schema, untyped data) -> untyped
+  end
+
+  # HTTP exception for returning error responses
+  #
+  # Example:
+  #   raise FunApi::HTTPException.new(status_code: 404, detail: "User not found")
+  #
+  class HTTPException < StandardError
+    attr_reader status_code: Integer
+    attr_reader detail: String | Array[Hash[Symbol, untyped]]
+    attr_reader headers: Hash[String, String]
+
+    # Create an HTTP exception
+    #
+    # @param status_code HTTP status code (e.g., 404, 500)
+    # @param detail Error message or structured error details
+    # @param headers Additional response headers
+    def initialize: (status_code: Integer, ?detail: String?, ?headers: Hash[String, String]?) -> void
+
+    # Convert to Rack response format
+    def to_response: () -> rack_response
+  end
+
+  # Validation error with detailed field-level errors
+  #
+  # Automatically raised by Schema.validate on validation failure
+  #
+  class ValidationError < HTTPException
+    attr_reader errors: untyped
+
+    # Create a validation error from schema errors
+    def initialize: (errors: untyped, ?headers: Hash[String, String]?) -> void
+
+    def to_response: () -> rack_response
+  end
+
+  # Error raised when a template file is not found
+  class TemplateNotFoundError < StandardError
+    attr_reader template_name: String
+
+    def initialize: (String template_name) -> void
+  end
+
+  # ERB template renderer with layout and partial support
+  #
+  # Example:
+  #   templates = FunApi::Templates.new(
+  #     directory: 'templates',
+  #     layout: 'layouts/application.html.erb'
+  #   )
+  #
+  #   api.get '/' do |input, req, task|
+  #     templates.response('home.html.erb', title: 'Home')
+  #   end
+  #
+  class Templates
+    # Create a new template renderer
+    #
+    # @param directory Path to templates directory
+    # @param layout Optional default layout template path
+    def initialize: (directory: String, ?layout: String?) -> void
+
+    # Create a scoped renderer with a different default layout
+    #
+    # Example:
+    #   admin = templates.with_layout('layouts/admin.html.erb')
+    def with_layout: (String layout) -> ScopedTemplates
+
+    # Render a template to a string
+    #
+    # @param name Template file path relative to directory
+    # @param layout Override layout (false to disable, string to use different layout)
+    # @param context Template variables as keyword arguments
+    def render: (String name, ?layout: String | false | nil, **untyped context) -> String
+
+    # Render a template and wrap in TemplateResponse
+    #
+    # @param name Template file path
+    # @param status HTTP status code
+    # @param headers Additional response headers
+    # @param layout Override layout
+    # @param context Template variables
+    def response: (
+      String name,
+      ?status: Integer,
+      ?headers: Hash[String, String],
+      ?layout: String | false | nil,
+      **untyped context
+    ) -> TemplateResponse
+
+    # Render a partial template (no layout applied)
+    def render_partial: (String name, **untyped context) -> String
+  end
+
+  # Scoped template renderer with a fixed layout
+  class ScopedTemplates
+    def initialize: (Templates templates, String layout) -> void
+
+    def render: (String name, ?layout: String | false | nil, **untyped context) -> String
+
+    def response: (
+      String name,
+      ?status: Integer,
+      ?headers: Hash[String, String],
+      ?layout: String | false | nil,
+      **untyped context
+    ) -> TemplateResponse
+
+    def render_partial: (String name, **untyped context) -> String
+  end
+
+  # HTML response wrapper for template rendering
+  #
+  # Returned from Templates#response, signals the framework to return HTML
+  # instead of JSON
+  #
+  class TemplateResponse
+    attr_reader body: String
+    attr_reader status: Integer
+    attr_reader headers: Hash[String, String]
+
+    def initialize: (String body, ?status: Integer, ?headers: Hash[String, String]) -> void
+
+    # Convert to Rack response format
+    def to_response: () -> rack_response
+  end
+
+  # Background task manager for post-response execution
+  #
+  # Tasks run after the response is sent but before dependencies are cleaned up.
+  # Perfect for emails, logging, webhooks.
+  #
+  # Example:
+  #   api.post '/signup' do |input, req, task, background:|
+  #     user = create_user(input[:body])
+  #     background.add_task(method(:send_welcome_email), user[:email])
+  #     [{ user: user }, 201]
+  #   end
+  #
+  class BackgroundTasks
+    def initialize: (untyped task) -> void
+
+    # Add a task to execute after response is sent
+    #
+    # @param callable A callable object (lambda, proc, method)
+    # @param args Positional arguments to pass to callable
+    # @param kwargs Keyword arguments to pass to callable
+    def add_task: (
+      ^(*untyped, **untyped) -> void callable,
+      *untyped args,
+      **untyped kwargs
+    ) -> nil
+
+    # Execute all queued tasks (called automatically by framework)
+    def execute: () -> void
+
+    # Check if there are any queued tasks
+    def empty?: () -> bool
+
+    # Number of queued tasks
+    def size: () -> Integer
+  end
+
+  # Dependency injection wrapper with sub-dependency support
+  #
+  # Example:
+  #   db_dep = FunApi::Depends.new(->(req:) { DB.connect(req.env['tenant']) })
+  #
+  class Depends
+    attr_reader callable: ^(**untyped) -> untyped
+    attr_reader sub_dependencies: Hash[Symbol, untyped]
+
+    # Create a new dependency
+    #
+    # @param callable A callable that produces the dependency value
+    # @param sub_dependencies Named dependencies this depends on
+    def initialize: (^(**untyped) -> untyped callable, **untyped sub_dependencies) -> void
+
+    # Resolve this dependency and its sub-dependencies
+    #
+    # @param context Resolution context with :input, :req, :task, :container
+    # @param cache Dependency cache for deduplication
+    # @return [value, cleanup_proc] tuple
+    def call: (Hash[Symbol, untyped] context, ?Hash[untyped, untyped] cache) -> [untyped, (^() -> void)?]
+  end
+
+  # Factory method for creating Depends instances
+  #
+  # Example:
+  #   FunApi.Depends(->(req:) { extract_user(req) })
+  #
+  def self.Depends: (^(**untyped) -> untyped callable, **untyped sub_dependencies) -> Depends
+
+  # Simple dependency wrapper (no cleanup needed)
+  class SimpleDependency
+    attr_reader resource: untyped
+
+    def initialize: (untyped resource) -> void
+    def call: () -> untyped
+    def cleanup: () -> void
+  end
+
+  # Managed dependency with explicit cleanup
+  class ManagedDependency
+    attr_reader resource: untyped
+    attr_reader cleanup_proc: ^() -> void
+
+    def initialize: (untyped resource, ^() -> void cleanup_proc) -> void
+    def call: () -> untyped
+    def cleanup: () -> void
+  end
+
+  # Block-based dependency with yield-style cleanup (like Python context managers)
+  class BlockDependency
+    def initialize: (^(^(untyped) -> untyped) -> untyped block) -> void
+    def call: () -> untyped
+    def cleanup: () -> void
+  end
+
+  # Built-in middleware
+  module Middleware
+    # Base class for middleware (optional to inherit from)
+    class Base
+      def initialize: (untyped app) -> void
+      def call: (rack_env env) -> rack_response
+    end
+
+    # CORS middleware
+    class Cors
+      def initialize: (
+        untyped app,
+        ?allow_origins: Array[String],
+        ?allow_methods: Array[String],
+        ?allow_headers: Array[String],
+        ?expose_headers: Array[String],
+        ?max_age: Integer,
+        ?allow_credentials: bool
+      ) -> void
+
+      def call: (rack_env env) -> rack_response
+    end
+
+    # Trusted host validation middleware
+    class TrustedHost
+      def initialize: (untyped app, allowed_hosts: Array[String | Regexp]) -> void
+      def call: (rack_env env) -> rack_response
+    end
+
+    # Request logging middleware
+    class RequestLogger
+      def initialize: (untyped app, ?logger: untyped, ?level: Symbol) -> void
+      def call: (rack_env env) -> rack_response
+    end
+  end
+
+  # Server adapters
+  module Server
+    # Falcon server adapter
+    #
+    # Example:
+    #   FunApi::Server::Falcon.start(app, port: 3000)
+    #
+    class Falcon
+      # Start the Falcon server with the given app
+      #
+      # @param app FunApi::App instance
+      # @param host Bind address
+      # @param port Port number
+      def self.start: (App app, ?host: String, ?port: Integer) -> void
+    end
+  end
+
+  # Router for path matching (internal, but exposed for advanced use)
+  class Router
+    # Route struct holding route metadata
+    class Route
+      attr_accessor verb: String
+      attr_accessor pattern: Regexp
+      attr_accessor keys: Array[String]
+      attr_accessor handler: ^(untyped, Hash[String, String]) -> rack_response
+      attr_accessor metadata: Hash[Symbol, untyped]
+    end
+
+    attr_reader routes: Array[Route]
+
+    def initialize: () -> void
+
+    # Add a route
+    def add: (String verb, String path, ?metadata: Hash[Symbol, untyped]) { (untyped, Hash[String, String]) -> rack_response } -> void
+
+    # Rack interface
+    def call: (rack_env env) -> rack_response
+  end
 end

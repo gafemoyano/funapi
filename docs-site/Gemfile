@@ -1,0 +1,9 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+gem "fun_api", path: ".."
+gem "kramdown"
+gem "kramdown-parser-gfm"
+gem "rouge"
+gem "erb"

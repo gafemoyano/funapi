@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %> - FunApi</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="layout">
+    <header class="header">
+      <a href="/" class="logo">FunApi</a>
+      <nav class="header-nav">
+        <a href="/docs/getting-started/quick-start">Docs</a>
+        <a href="https://github.com/gafemoyano/fun_api" target="_blank">GitHub</a>
+      </nav>
+    </header>
+
+    <aside class="sidebar">
+      <%= render_partial("partials/_nav.html.erb", nav: nav, current_path: current_path) %>
+    </aside>
+
+    <main class="content">
+      <%= yield_content %>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,25 +1,25 @@
 # frozen_string_literal: true
 
-require 'async'
-require 'async/http/server'
-require 'async/http/endpoint'
-require 'protocol/rack'
-require 'dry-container'
-require_relative 'router'
-require_relative 'async'
-require_relative 'exceptions'
-require_relative 'schema'
-require_relative 'depends'
-require_relative 'dependency_wrapper'
-require_relative 'background_tasks'
-require_relative 'template_response'
-require_relative 'openapi/spec_generator'
+require "async"
+require "async/http/server"
+require "async/http/endpoint"
+require "protocol/rack"
+require "dry-container"
+require_relative "router"
+require_relative "async"
+require_relative "exceptions"
+require_relative "schema"
+require_relative "depends"
+require_relative "dependency_wrapper"
+require_relative "background_tasks"
+require_relative "template_response"
+require_relative "openapi/spec_generator"
 
 module FunApi
   class App
     attr_reader :openapi_config, :container, :startup_hooks, :shutdown_hooks
 
-    def initialize(title: 'FunApi Application', version: '1.0.0', description: '')
+    def initialize(title: "FunApi Application", version: "1.0.0", description: "")
       @router = Router.new
       @middleware_stack = []
       @container = Dry::Container.new
@@ -80,23 +80,23 @@ module FunApi
     end
 
     def get(path, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route('GET', path, query: query, response_schema: response_schema, depends: depends, &blk)
+      add_route("GET", path, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
     def post(path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route('POST', path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
+      add_route("POST", path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
     def put(path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route('PUT', path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
+      add_route("PUT", path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
     def patch(path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route('PATCH', path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
+      add_route("PATCH", path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
     def delete(path, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route('DELETE', path, query: query, response_schema: response_schema, depends: depends, &blk)
+      add_route("DELETE", path, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
     def use(middleware, *args, &block)
@@ -104,31 +104,31 @@ module FunApi
       self
     end
 
-    def add_cors(allow_origins: ['*'], allow_methods: ['*'], allow_headers: ['*'],
-                 expose_headers: [], max_age: 600, allow_credentials: false)
-      require_relative 'middleware/cors'
+    def add_cors(allow_origins: ["*"], allow_methods: ["*"], allow_headers: ["*"],
+      expose_headers: [], max_age: 600, allow_credentials: false)
+      require_relative "middleware/cors"
       use FunApi::Middleware::Cors,
-          allow_origins: allow_origins,
-          allow_methods: allow_methods,
-          allow_headers: allow_headers,
-          expose_headers: expose_headers,
-          max_age: max_age,
-          allow_credentials: allow_credentials
+        allow_origins: allow_origins,
+        allow_methods: allow_methods,
+        allow_headers: allow_headers,
+        expose_headers: expose_headers,
+        max_age: max_age,
+        allow_credentials: allow_credentials
     end
 
     def add_trusted_host(allowed_hosts:)
-      require_relative 'middleware/trusted_host'
+      require_relative "middleware/trusted_host"
       use FunApi::Middleware::TrustedHost, allowed_hosts: allowed_hosts
     end
 
     def add_request_logger(logger: nil, level: :info)
-      require_relative 'middleware/request_logger'
+      require_relative "middleware/request_logger"
       use FunApi::Middleware::RequestLogger, logger: logger, level: level
     end
 
     def add_gzip
       use Rack::Deflater, if: lambda { |_env, _status, headers, _body|
-        headers['content-type']&.start_with?('application/json')
+        headers["content-type"]&.start_with?("application/json")
       }
     end
 
@@ -203,9 +203,9 @@ module FunApi
           body: parse_body(req)
         }
 
-        input[:query] = Schema.validate(query_schema, input[:query], location: 'query') if query_schema
+        input[:query] = Schema.validate(query_schema, input[:query], location: "query") if query_schema
 
-        input[:body] = Schema.validate(body_schema, input[:body], location: 'body') if body_schema
+        input[:body] = Schema.validate(body_schema, input[:body], location: "body") if body_schema
 
         resolved_deps, cleanup_objects = resolve_dependencies(dependencies, input, req, current_task)
 
@@ -237,7 +237,7 @@ module FunApi
       ensure
         cleanup_objects.each do |wrapper|
           wrapper.cleanup
-        rescue StandardError => e
+        rescue => e
           warn "Dependency cleanup failed: #{e.message}"
         end
         Fiber[:async_task] = nil
@@ -249,10 +249,10 @@ module FunApi
 
       @middleware_stack.reverse_each do |middleware, args, block|
         app = if args.length == 1 && args.first.is_a?(Hash) && args.first.keys.all? { |k| k.is_a?(Symbol) }
-                middleware.new(app, **args.first, &block)
-              else
-                middleware.new(app, *args, &block)
-              end
+          middleware.new(app, **args.first, &block)
+        else
+          middleware.new(app, *args, &block)
+        end
       end
 
       app
@@ -306,7 +306,7 @@ module FunApi
       when %r{application/json}
         begin
           JSON.parse(body, symbolize_names: true)
-        rescue StandardError
+        rescue
           {}
         end
       when %r{application/x-www-form-urlencoded}
@@ -317,8 +317,8 @@ module FunApi
     end
 
     def extract_headers(env)
-      env.select { |k, _v| k.start_with?('HTTP_') }
-         .transform_keys { |k| k.sub('HTTP_', '').downcase }
+      env.select { |k, _v| k.start_with?("HTTP_") }
+        .transform_keys { |k| k.sub("HTTP_", "").downcase }
     end
 
     def normalize_response(response)
@@ -345,9 +345,9 @@ module FunApi
     def default_headers(body)
       case body
       when Hash, Array
-        { 'content-type' => 'application/json' }
+        {"content-type" => "application/json"}
       else
-        { 'content-type' => 'text/plain' }
+        {"content-type" => "text/plain"}
       end
     end
 
@@ -362,7 +362,7 @@ module FunApi
     end
 
     def normalize_single_payload(item)
-      if item.respond_to?(:to_h) && item.class.name&.include?('Dry::Schema::Result')
+      if item.respond_to?(:to_h) && item.class.name&.include?("Dry::Schema::Result")
         item.to_h
       else
         item
@@ -378,30 +378,30 @@ module FunApi
       when Array
         depends.each do |dep_name|
           sym = dep_name.to_sym
-          normalized[sym] = { type: :container, key: sym }
+          normalized[sym] = {type: :container, key: sym}
         end
       when Hash
         depends.each do |key, value|
           normalized[key.to_sym] = case value
-                                   when Depends
-                                     { type: :depends, callable: value }
-                                   when Symbol
-                                     { type: :container, key: value }
-                                   when Proc, Method
-                                     { type: :depends, callable: Depends.new(value) }
-                                   when nil
-                                     { type: :container, key: key.to_sym }
-                                   else
-                                     unless value.respond_to?(:call)
-                                       raise ArgumentError, "Dependency must be callable, Depends, Symbol, or nil for #{key}"
-                                     end
+          when Depends
+            {type: :depends, callable: value}
+          when Symbol
+            {type: :container, key: value}
+          when Proc, Method
+            {type: :depends, callable: Depends.new(value)}
+          when nil
+            {type: :container, key: key.to_sym}
+          else
+            unless value.respond_to?(:call)
+              raise ArgumentError, "Dependency must be callable, Depends, Symbol, or nil for #{key}"
+            end
 
-                                     { type: :depends, callable: Depends.new(value) }
+            {type: :depends, callable: Depends.new(value)}
 
-                                   end
+          end
         end
       else
-        raise ArgumentError, 'depends must be an Array or Hash'
+        raise ArgumentError, "depends must be an Array or Hash"
       end
 
       normalized
@@ -429,7 +429,7 @@ module FunApi
           else
             dependency_wrapper = @container.resolve(dep_info[:key])
             resource = dependency_wrapper.call
-            cache[cache_key] = { resource: resource, wrapper: dependency_wrapper }
+            cache[cache_key] = {resource: resource, wrapper: dependency_wrapper}
             cleanup_objects << dependency_wrapper
             resource
           end
@@ -441,7 +441,7 @@ module FunApi
       end
 
       [resolved, cleanup_objects]
-    rescue StandardError => e
+    rescue => e
       raise HTTPException.new(
         status_code: 500,
         detail: "Dependency resolution failed: #{e.message}"
@@ -449,20 +449,20 @@ module FunApi
     end
 
     def register_openapi_routes
-      @router.add('GET', '/openapi.json', metadata: { internal: true }) do |_req, _path_params|
+      @router.add("GET", "/openapi.json", metadata: {internal: true}) do |_req, _path_params|
         spec = generate_openapi_spec
         [
           200,
-          { 'content-type' => 'application/json' },
+          {"content-type" => "application/json"},
           [JSON.dump(spec)]
         ]
       end
 
-      @router.add('GET', '/docs', metadata: { internal: true }) do |_req, _path_params|
+      @router.add("GET", "/docs", metadata: {internal: true}) do |_req, _path_params|
         html = swagger_ui_html
         [
           200,
-          { 'content-type' => 'text/html' },
+          {"content-type" => "text/html"},
           [html]
         ]
       end

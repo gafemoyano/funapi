@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Run the FunApi docs site
+
+cd "$(dirname "$0")/docs-site" || exit 1
+
+# Use docs-site's own Gemfile
+BUNDLE_GEMFILE="$PWD/Gemfile" bundle install
+BUNDLE_GEMFILE="$PWD/Gemfile" bundle exec ruby app.rb "$@"

@@ -1,0 +1,19 @@
+<nav class="nav">
+  <% nav.each do |section| %>
+    <div class="nav-section">
+      <h3 class="nav-section-title"><%= section[:title] %></h3>
+      <ul class="nav-list">
+        <% section[:items].each do |item| %>
+          <li class="nav-item">
+            <a 
+              href="/docs/<%= item[:path] %>" 
+              class="nav-link<%= ' active' if current_path == item[:path] %>"
+            >
+              <%= item[:title] %>
+            </a>
+          </li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+</nav>

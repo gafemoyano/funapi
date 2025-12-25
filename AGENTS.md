@@ -19,19 +19,19 @@ FunApi is a minimal, async-first Ruby web framework inspired by FastAPI. This fi
 
 ```bash
 # Install dependencies
-bundle install
+./bin/bundle install
 
 # Run tests
-bundle exec rake test
+./bin/bundle exec rake test
 
 # Run linter (Standard Ruby)
-bundle exec rake standard
+./bin/bundle exec rake standard
 
 # Run linter with auto-fix
-bundle exec standardrb --fix
+./bin/bundle exec standardrb --fix
 
 # Run both tests and linting
-bundle exec rake
+./bin/bundle exec rake
 ```
 
 ## Development Workflow

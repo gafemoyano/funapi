@@ -22,11 +22,11 @@ module FunApi
       result, cleanup = execute_callable(available_context)
 
       combined_cleanup = if sub_cleanups.any? || cleanup
-                           lambda {
-                             sub_cleanups.each(&:call)
-                             cleanup&.call
-                           }
-                         end
+        lambda {
+          sub_cleanups.each(&:call)
+          cleanup&.call
+        }
+      end
 
       final_result = [result, combined_cleanup]
       cache[cache_key] = final_result
@@ -38,7 +38,7 @@ module FunApi
     def validate_callable!
       return if @callable.respond_to?(:call)
 
-      raise ArgumentError, 'Dependency must be callable (respond to :call)'
+      raise ArgumentError, "Dependency must be callable (respond to :call)"
     end
 
     def resolve_sub_dependencies(context, cache)
@@ -46,28 +46,28 @@ module FunApi
 
       resolved = @sub_dependencies.transform_values do |dep|
         result = if dep.is_a?(Depends)
-                   dep.call(context, cache)
-                 elsif dep.is_a?(Symbol)
-                   container = context[:container]
-                   unless container && container.respond_to?(:resolve)
-                     raise ArgumentError, "Cannot resolve symbol dependency :#{dep} without container in context"
-                   end
+          dep.call(context, cache)
+        elsif dep.is_a?(Symbol)
+          container = context[:container]
+          unless container && container.respond_to?(:resolve)
+            raise ArgumentError, "Cannot resolve symbol dependency :#{dep} without container in context"
+          end
 
-                   wrapper = container.resolve(dep)
-                   resource = wrapper.call
-                   [resource, nil]
+          wrapper = container.resolve(dep)
+          resource = wrapper.call
+          [resource, nil]
 
-                 elsif dep.respond_to?(:call)
-                   Depends.new(dep).call(context, cache)
-                 else
-                   [dep, nil]
-                 end
+        elsif dep.respond_to?(:call)
+          Depends.new(dep).call(context, cache)
+        else
+          [dep, nil]
+        end
 
         resource, cleanup = if result.is_a?(Array) && result.length == 2
-                              result
-                            else
-                              [result, nil]
-                            end
+          result
+        else
+          [result, nil]
+        end
 
         cleanups << cleanup if cleanup
         resource
@@ -88,10 +88,10 @@ module FunApi
       params = extract_params(context)
 
       result = if params.any?
-                 @callable.call(**params)
-               else
-                 @callable.call
-               end
+        @callable.call(**params)
+      else
+        @callable.call
+      end
 
       handle_result(result)
     end

@@ -23,7 +23,7 @@ gem 'fun_api'
 And then execute:
 
 ```bash
-bundle install
+./bin/bundle install
 ```
 
 ## Quick Start

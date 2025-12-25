@@ -12,7 +12,8 @@ module FunApi
       @resource
     end
 
-    def cleanup; end
+    def cleanup
+    end
   end
 
   class ManagedDependency

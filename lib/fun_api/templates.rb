@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-require "erb"
-require "pathname"
-require_relative "template_response"
-require_relative "exceptions"
+require 'erb'
+require 'pathname'
+require_relative 'template_response'
+require_relative 'exceptions'
 
 module FunApi
   class Templates
@@ -42,6 +42,7 @@ module FunApi
     def determine_layout(layout_override)
       return nil if layout_override == false
       return layout_override if layout_override
+
       @layout
     end
 
@@ -61,7 +62,7 @@ module FunApi
       path = @directory.join(name)
       raise TemplateNotFoundError.new(name) unless path.exist?
 
-      @cache[name] ||= ERB.new(path.read, trim_mode: "-")
+      @cache[name] ||= ERB.new(path.read, trim_mode: '-')
     end
   end
 
