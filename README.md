@@ -485,6 +485,45 @@ end
 
 See `examples/templates_demo.rb` for a complete HTMX todo app example.
 
+### 10. Lifecycle Hooks
+
+Execute code when the application starts up or shuts down:
+
+```ruby
+app = FunApi::App.new do |api|
+  api.on_startup do
+    puts "Connecting to database..."
+    DB.connect
+  end
+  
+  api.on_startup do
+    puts "Warming cache..."
+    Cache.warm
+  end
+  
+  api.on_shutdown do
+    puts "Disconnecting..."
+    DB.disconnect
+  end
+end
+```
+
+**Key behaviors:**
+- Multiple hooks supported (executed in registration order)
+- Startup hooks run before server accepts requests
+- Shutdown hooks run after server stops accepting requests
+- Startup errors prevent server from starting
+- Shutdown errors are logged but don't prevent other hooks from running
+
+**Use cases:**
+- Database connection pool initialization
+- Cache warming
+- Background task supervisor setup
+- Metrics/logging initialization
+- Graceful resource cleanup
+
+See `examples/lifecycle_demo.rb` for a complete example.
+
 ## Complete Example
 
 ```ruby
@@ -595,17 +634,18 @@ Active development. Core features implemented:
 - ✅ Dependency injection with cleanup
 - ✅ Background tasks (post-response execution)
 - ✅ Template rendering (ERB with layouts and partials)
+- ✅ Lifecycle hooks (startup/shutdown)
 
 ## Future Enhancements
 
 - ~~Dependency injection system~~ ✅ Implemented
 - ~~Background tasks~~ ✅ Implemented
 - ~~Template rendering~~ ✅ Implemented
+- ~~Lifecycle hooks (startup/shutdown)~~ ✅ Implemented
 - Path parameter type validation
 - Response schema options (exclude_unset, include, exclude)
 - WebSocket support
 - Content negotiation (JSON, XML, etc.)
-- Lifecycle hooks (startup/shutdown)
 
 ## Development
 

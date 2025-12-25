@@ -17,12 +17,14 @@ require_relative 'openapi/spec_generator'
 
 module FunApi
   class App
-    attr_reader :openapi_config, :container
+    attr_reader :openapi_config, :container, :startup_hooks, :shutdown_hooks
 
     def initialize(title: 'FunApi Application', version: '1.0.0', description: '')
       @router = Router.new
       @middleware_stack = []
       @container = Dry::Container.new
+      @startup_hooks = []
+      @shutdown_hooks = []
       @openapi_config = {
         title: title,
         version: version,
@@ -32,6 +34,30 @@ module FunApi
       yield self if block_given?
 
       register_openapi_routes
+    end
+
+    def on_startup(&block)
+      raise ArgumentError, "on_startup requires a block" unless block_given?
+      @startup_hooks << block
+      self
+    end
+
+    def on_shutdown(&block)
+      raise ArgumentError, "on_shutdown requires a block" unless block_given?
+      @shutdown_hooks << block
+      self
+    end
+
+    def run_startup_hooks
+      @startup_hooks.each(&:call)
+    end
+
+    def run_shutdown_hooks
+      @shutdown_hooks.each do |hook|
+        hook.call
+      rescue => e
+        warn "Shutdown hook failed: #{e.message}"
+      end
     end
 
     def register(key, &block)

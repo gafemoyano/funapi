@@ -152,6 +152,25 @@ class ConfigurableMiddleware
 end
 ```
 
+### Lifecycle Hooks
+
+Run code at startup/shutdown:
+```ruby
+api.on_startup do
+  DB.connect
+  Cache.warm
+end
+
+api.on_shutdown do
+  DB.disconnect
+end
+```
+
+- Multiple hooks allowed (run in registration order)
+- Startup hooks run before server accepts requests
+- Shutdown hooks run after server stops
+- Shutdown errors logged but don't stop other hooks
+
 ### Template Rendering
 
 Return `TemplateResponse` for HTML instead of JSON:
@@ -287,6 +306,7 @@ All tests live in `test/` (flat structure):
 - `test_async.rb` - Async operations (10 tests)
 - `test_exceptions.rb` - Error handling (10 tests)
 - `test_templates.rb` - Template rendering (37 tests)
+- `test_lifecycle.rb` - Lifecycle hooks (14 tests)
 
 ### Writing Tests
 
@@ -322,6 +342,7 @@ end
 ✅ Async operations (concurrency, timeouts, dependencies)
 ✅ Exceptions (HTTPException, custom errors)
 ✅ Templates (rendering, layouts, partials, with_layout)
+✅ Lifecycle hooks (startup/shutdown, error handling)
 
 ### Manual Testing
 
@@ -382,9 +403,9 @@ See `README.md` for full list. Key priorities:
 1. ~~Dependency injection system~~ ✅ Done
 2. ~~Background tasks~~ ✅ Done
 3. ~~Template rendering~~ ✅ Done
-4. Path parameter type validation
-5. WebSocket support
-6. Lifecycle hooks (startup/shutdown)
+4. ~~Lifecycle hooks (startup/shutdown)~~ ✅ Done
+5. Path parameter type validation
+6. WebSocket support
 
 ## Questions?
 
