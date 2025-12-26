@@ -71,10 +71,10 @@ ruby test/demo_middleware.rb
 - Use descriptive variable names (no abbreviations)
 
 **File Organization**:
-- Core framework: `lib/fun_api/`
-- Middleware: `lib/fun_api/middleware/`
-- OpenAPI: `lib/fun_api/openapi/`
-- Server adapters: `lib/fun_api/server/`
+- Core framework: `lib/funapi/`
+- Middleware: `lib/funapi/middleware/`
+- OpenAPI: `lib/funapi/openapi/`
+- Server adapters: `lib/funapi/server/`
 - Examples: `examples/`
 - Tests/Demos: `test/`
 
@@ -175,7 +175,7 @@ end
 
 Return `TemplateResponse` for HTML instead of JSON:
 ```ruby
-require 'fun_api/templates'
+require 'funapi/templates'
 
 templates = FunApi::Templates.new(
   directory: 'templates',
@@ -216,21 +216,21 @@ end
 
 ## Key Files and Their Purpose
 
-- `lib/fun_api/application.rb` - Main App class, route registration, middleware system
-- `lib/fun_api/router.rb` - Route matching and path parameter extraction
-- `lib/fun_api/schema.rb` - Validation wrapper around dry-schema
-- `lib/fun_api/exceptions.rb` - HTTPException, ValidationError, TemplateNotFoundError
-- `lib/fun_api/templates.rb` - ERB template rendering with layouts/partials
-- `lib/fun_api/template_response.rb` - HTML response wrapper
-- `lib/fun_api/middleware/` - Built-in middleware (CORS, TrustedHost, RequestLogger)
-- `lib/fun_api/openapi/` - OpenAPI spec generation from routes and schemas
-- `lib/fun_api/server/falcon.rb` - Falcon server integration
+- `lib/funapi/application.rb` - Main App class, route registration, middleware system
+- `lib/funapi/router.rb` - Route matching and path parameter extraction
+- `lib/funapi/schema.rb` - Validation wrapper around dry-schema
+- `lib/funapi/exceptions.rb` - HTTPException, ValidationError, TemplateNotFoundError
+- `lib/funapi/templates.rb` - ERB template rendering with layouts/partials
+- `lib/funapi/template_response.rb` - HTML response wrapper
+- `lib/funapi/middleware/` - Built-in middleware (CORS, TrustedHost, RequestLogger)
+- `lib/funapi/openapi/` - OpenAPI spec generation from routes and schemas
+- `lib/funapi/server/falcon.rb` - Falcon server integration
 
 ## Common Tasks
 
 ### Adding a New Built-in Middleware
 
-1. Create file in `lib/fun_api/middleware/my_middleware.rb`
+1. Create file in `lib/funapi/middleware/my_middleware.rb`
 2. Follow pattern:
    ```ruby
    module FunApi
@@ -249,27 +249,27 @@ end
      end
    end
    ```
-3. Add convenience method to `lib/fun_api/application.rb`:
+3. Add convenience method to `lib/funapi/application.rb`:
    ```ruby
    def add_my_middleware(**options)
      require_relative 'middleware/my_middleware'
      use FunApi::Middleware::MyMiddleware, **options
    end
    ```
-4. Require in `lib/fun_api/middleware.rb`
+4. Require in `lib/funapi/middleware.rb`
 5. Add example to `examples/middleware_demo.rb`
 6. Update README.md middleware section
 
 ### Adding a New Route Helper
 
-1. Add method to `lib/fun_api/application.rb`
+1. Add method to `lib/funapi/application.rb`
 2. Follow existing pattern (get, post, put, patch, delete)
 3. Use `add_route` internally with proper verb
 
 ### Extending OpenAPI Generation
 
-1. Schema conversion: `lib/fun_api/openapi/schema_converter.rb`
-2. Spec generation: `lib/fun_api/openapi/spec_generator.rb`
+1. Schema conversion: `lib/funapi/openapi/schema_converter.rb`
+2. Spec generation: `lib/funapi/openapi/spec_generator.rb`
 3. Test with `ruby test/demo_openapi.rb` and check `/docs`
 
 ## Testing Instructions

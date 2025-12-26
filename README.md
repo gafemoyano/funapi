@@ -17,7 +17,7 @@ FunApi aims to bring FastAPI's excellent developer experience to Ruby by providi
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'fun_api'
+gem 'funapi'
 ```
 
 And then execute:
@@ -29,8 +29,8 @@ And then execute:
 ## Quick Start
 
 ```ruby
-require 'fun_api'
-require 'fun_api/server/falcon'
+require 'funapi'
+require 'funapi/server/falcon'
 
 UserSchema = FunApi::Schema.define do
   required(:name).filled(:string)
@@ -368,8 +368,8 @@ end
 Render ERB templates for HTML responses, perfect for HTMX-style applications:
 
 ```ruby
-require 'fun_api'
-require 'fun_api/templates'
+require 'funapi'
+require 'funapi/templates'
 
 templates = FunApi::Templates.new(directory: 'templates')
 
@@ -527,8 +527,8 @@ See `examples/lifecycle_demo.rb` for a complete example.
 ## Complete Example
 
 ```ruby
-require 'fun_api'
-require 'fun_api/server/falcon'
+require 'funapi'
+require 'funapi/server/falcon'
 
 UserCreateSchema = FunApi::Schema.define do
   required(:name).filled(:string)
