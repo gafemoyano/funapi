@@ -11,9 +11,9 @@ FunApi works with any database library. Here's how to integrate common options.
 [db-postgres](https://github.com/socketry/db-postgres) is async-native and works great with FunApi:
 
 ```ruby
-require 'fun_api'
+require 'funapi'
 require 'db/postgres'
-require 'fun_api/server/falcon'
+require 'funapi/server/falcon'
 
 app = FunApi::App.new do |api|
   api.on_startup do
@@ -40,9 +40,9 @@ end
 [Sequel](https://sequel.jeremyevans.net/) is a powerful database toolkit:
 
 ```ruby
-require 'fun_api'
+require 'funapi'
 require 'sequel'
-require 'fun_api/server/falcon'
+require 'funapi/server/falcon'
 
 DB = Sequel.connect(ENV['DATABASE_URL'])
 
@@ -71,9 +71,9 @@ end
 You can use ActiveRecord standalone (without Rails):
 
 ```ruby
-require 'fun_api'
+require 'funapi'
 require 'active_record'
-require 'fun_api/server/falcon'
+require 'funapi/server/falcon'
 
 ActiveRecord::Base.establish_connection(ENV['DATABASE_URL'])
 

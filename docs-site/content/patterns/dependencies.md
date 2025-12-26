@@ -99,8 +99,8 @@ end
 ## Complete Example
 
 ```ruby
-require 'fun_api'
-require 'fun_api/server/falcon'
+require 'funapi'
+require 'funapi/server/falcon'
 
 app = FunApi::App.new(title: "My API") do |api|
   # Simple dependency

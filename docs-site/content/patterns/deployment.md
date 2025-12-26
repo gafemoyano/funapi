@@ -12,8 +12,8 @@ FunApi uses Falcon as its server:
 
 ```ruby
 # app.rb
-require 'fun_api'
-require 'fun_api/server/falcon'
+require 'funapi'
+require 'funapi/server/falcon'
 
 app = FunApi::App.new do |api|
   # routes...

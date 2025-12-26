@@ -7,8 +7,8 @@ title: FunApi
 A minimal, async-first Ruby web framework inspired by FastAPI.
 
 ```ruby
-require 'fun_api'
-require 'fun_api/server/falcon'
+require 'funapi'
+require 'funapi/server/falcon'
 
 UserSchema = FunApi::Schema.define do
   required(:name).filled(:string)
@@ -50,7 +50,7 @@ FunApi brings together proven Ruby libraries:
 Add to your Gemfile:
 
 ```ruby
-gem 'fun_api'
+gem 'funapi'
 ```
 
 Then run:
@@ -62,8 +62,8 @@ bundle install
 ## Quick Example
 
 ```ruby
-require 'fun_api'
-require 'fun_api/server/falcon'
+require 'funapi'
+require 'funapi/server/falcon'
 
 app = FunApi::App.new do |api|
   api.get '/hello/:name' do |input, req, task|

@@ -104,8 +104,8 @@ For complex jobs, use a proper job queue like Sidekiq or GoodJob.
 ## Complete Example
 
 ```ruby
-require 'fun_api'
-require 'fun_api/server/falcon'
+require 'funapi'
+require 'funapi/server/falcon'
 
 def send_welcome_email(email)
   puts "Sending welcome email to #{email}"

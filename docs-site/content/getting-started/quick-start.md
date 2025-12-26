@@ -11,7 +11,7 @@ Get a FunApi application running in under 5 minutes.
 Add FunApi to your Gemfile:
 
 ```ruby
-gem 'fun_api'
+gem 'funapi'
 ```
 
 Then install:
@@ -25,8 +25,8 @@ bundle install
 Create a file called `app.rb`:
 
 ```ruby
-require 'fun_api'
-require 'fun_api/server/falcon'
+require 'funapi'
+require 'funapi/server/falcon'
 
 app = FunApi::App.new(
   title: "My First API",
@@ -80,8 +80,8 @@ You'll see interactive Swagger UI documentation automatically generated from you
 Let's add a POST endpoint with request validation:
 
 ```ruby
-require 'fun_api'
-require 'fun_api/server/falcon'
+require 'funapi'
+require 'funapi/server/falcon'
 
 UserSchema = FunApi::Schema.define do
   required(:name).filled(:string)

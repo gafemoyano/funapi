@@ -9,7 +9,7 @@ Render ERB templates for HTML responses. Perfect for HTMX-powered applications.
 ## Setup
 
 ```ruby
-require 'fun_api/templates'
+require 'funapi/templates'
 
 templates = FunApi::Templates.new(
   directory: 'templates',
