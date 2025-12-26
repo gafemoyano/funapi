@@ -115,8 +115,8 @@ class TestLifecycle < Minitest::Test
     order = []
     app = FunApi::App.new do |api|
       api.on_startup do
-        Async do |task|
-          task.sleep(0.001)
+        Async do
+          sleep(0.001)
           order << :async_startup
         end.wait
       end

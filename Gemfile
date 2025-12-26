@@ -2,17 +2,20 @@
 
 source "https://rubygems.org"
 
-# Specify your gem's dependencies in funapi.gemspec
 gemspec
 
-gem "irb"
-gem "rake", "~> 13.0"
+group :development do
+  gem "irb"
+  gem "rake", "~> 13.0"
+  gem "standard", "~> 1.3"
+end
 
-gem "minitest", "~> 5.16"
+group :test do
+  gem "minitest", "~> 5.16"
 
-gem "standard", "~> 1.3"
-
-# Optional: for database integration testing
-gem "db", "~> 0.14"
-gem "db-postgres", "~> 0.9"
-gem "testcontainers-postgres", "~> 0.1"
+  # Database integration testing (optional)
+  gem "base64"
+  gem "db", "~> 0.14"
+  gem "db-postgres", "~> 0.9"
+  gem "testcontainers-postgres", "~> 0.1"
+end

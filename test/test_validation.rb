@@ -21,7 +21,7 @@ class TestValidation < Minitest::Test
     end
 
     FunApi::App.new do |api|
-      block.call(api, query_schema, body_schema, strict_schema) if block
+      block&.call(api, query_schema, body_schema, strict_schema)
 
       api.get "/query-test", query: query_schema do |input, _req, _task|
         [{received: input[:query]}, 200]

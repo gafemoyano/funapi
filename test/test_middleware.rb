@@ -48,7 +48,7 @@ class TestMiddleware < Minitest::Test
 
   def app_with_middleware(&block)
     FunApi::App.new do |api|
-      block.call(api) if block
+      block&.call(api)
       api.get "/test" do |_input, _req, _task|
         [{message: "test"}, 200]
       end

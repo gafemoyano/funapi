@@ -49,7 +49,7 @@ module FunApi
           dep.call(context, cache)
         elsif dep.is_a?(Symbol)
           container = context[:container]
-          unless container && container.respond_to?(:resolve)
+          unless container&.respond_to?(:resolve)
             raise ArgumentError, "Cannot resolve symbol dependency :#{dep} without container in context"
           end
 

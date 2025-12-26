@@ -38,12 +38,14 @@ module FunApi
 
     def on_startup(&block)
       raise ArgumentError, "on_startup requires a block" unless block_given?
+
       @startup_hooks << block
       self
     end
 
     def on_shutdown(&block)
       raise ArgumentError, "on_shutdown requires a block" unless block_given?
+
       @shutdown_hooks << block
       self
     end
@@ -209,7 +211,9 @@ module FunApi
 
         resolved_deps, cleanup_objects = resolve_dependencies(dependencies, input, req, current_task)
 
-        handler_params = blk.parameters.select { |type, _name| %i[keyreq key].include?(type) }.map(&:last)
+        # standard:disable Style/HashSlice
+        handler_params = blk.parameters.select { |type, _| %i[keyreq key].include?(type) }.map(&:last)
+        # standard:enable Style/HashSlice
         resolved_deps[:background] = background_tasks if handler_params.include?(:background)
 
         payload, status = blk.call(input, req, current_task, **resolved_deps)

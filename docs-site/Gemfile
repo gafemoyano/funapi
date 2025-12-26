@@ -2,7 +2,7 @@
 
 source "https://rubygems.org"
 
-gem "fun_api", path: ".."
+gem "funapi", path: ".."
 gem "kramdown"
 gem "kramdown-parser-gfm"
 gem "rouge"

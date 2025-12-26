@@ -45,6 +45,7 @@ GEM
       async
       async-container (~> 0.16)
       string-format (~> 0.2)
+    base64 (0.3.0)
     bigdecimal (3.3.1)
     concurrent-ruby (1.3.5)
     console (1.34.0)
@@ -222,6 +223,7 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
+  base64
   db (~> 0.14)
   db-postgres (~> 0.9)
   funapi!

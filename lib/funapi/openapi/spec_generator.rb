@@ -140,7 +140,7 @@ module FunApi
         unless schema_name
           @schema_counter += 1
           method_name = path.split("/").reject(&:empty?).map do |s|
-            s.start_with?(":") ? s[1..-1].capitalize : s.capitalize
+            s.start_with?(":") ? s[1..].capitalize : s.capitalize
           end.join
           schema_name = "#{method_name}#{verb.capitalize}Schema#{@schema_counter}"
         end

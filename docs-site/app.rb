@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-require 'funapi'
-require 'funapi/templates'
-require 'funapi/server/falcon'
-require 'kramdown'
-require 'kramdown-parser-gfm'
-require 'rouge'
+require "funapi"
+require "funapi/templates"
+require "funapi/server/falcon"
+require "kramdown"
+require "kramdown-parser-gfm"
+require "rouge"
 
 class DocsRenderer
   def initialize(content_dir:)
@@ -15,19 +15,19 @@ class DocsRenderer
 
   def render(path)
     file_path = @content_dir.join("#{path}.md")
-    raise FunApi::HTTPException.new(status_code: 404, detail: 'Page not found') unless file_path.exist?
+    raise FunApi::HTTPException.new(status_code: 404, detail: "Page not found") unless file_path.exist?
 
     @cache[path] ||= begin
       content = file_path.read
       frontmatter, body = parse_frontmatter(content)
       html = Kramdown::Document.new(
         body,
-        input: 'GFM',
-        syntax_highlighter: 'rouge',
-        syntax_highlighter_opts: { default_lang: 'ruby' }
+        input: "GFM",
+        syntax_highlighter: "rouge",
+        syntax_highlighter_opts: {default_lang: "ruby"}
       ).to_html
 
-      { frontmatter: frontmatter, html: html }
+      {frontmatter: frontmatter, html: html}
     end
   end
 
@@ -38,8 +38,8 @@ class DocsRenderer
   private
 
   def parse_frontmatter(content)
-    if content.start_with?('---')
-      parts = content.split('---', 3)
+    if content.start_with?("---")
+      parts = content.split("---", 3)
       frontmatter = parse_yaml(parts[1])
       body = parts[2]
       [frontmatter, body]
@@ -59,36 +59,36 @@ class DocsRenderer
   def build_navigation
     [
       {
-        title: 'Getting Started',
+        title: "Getting Started",
         items: [
-          { path: 'getting-started/at-glance', title: 'At Glance' },
-          { path: 'getting-started/quick-start', title: 'Quick Start' },
-          { path: 'getting-started/key-concepts', title: 'Key Concepts' }
+          {path: "getting-started/at-glance", title: "At Glance"},
+          {path: "getting-started/quick-start", title: "Quick Start"},
+          {path: "getting-started/key-concepts", title: "Key Concepts"}
         ]
       },
       {
-        title: 'Essential',
+        title: "Essential",
         items: [
-          { path: 'essential/routing', title: 'Routing' },
-          { path: 'essential/handler', title: 'Handler' },
-          { path: 'essential/validation', title: 'Validation' },
-          { path: 'essential/openapi', title: 'OpenAPI' },
-          { path: 'essential/lifecycle', title: 'Lifecycle' },
-          { path: 'essential/middleware', title: 'Middleware' }
+          {path: "essential/routing", title: "Routing"},
+          {path: "essential/handler", title: "Handler"},
+          {path: "essential/validation", title: "Validation"},
+          {path: "essential/openapi", title: "OpenAPI"},
+          {path: "essential/lifecycle", title: "Lifecycle"},
+          {path: "essential/middleware", title: "Middleware"}
         ]
       },
       {
-        title: 'Patterns',
+        title: "Patterns",
         items: [
-          { path: 'patterns/async-operations', title: 'Async Operations' },
-          { path: 'patterns/dependencies', title: 'Dependencies' },
-          { path: 'patterns/background-tasks', title: 'Background Tasks' },
-          { path: 'patterns/templates', title: 'Templates' },
-          { path: 'patterns/error-handling', title: 'Error Handling' },
-          { path: 'patterns/response-schema', title: 'Response Schema' },
-          { path: 'patterns/database', title: 'Database' },
-          { path: 'patterns/testing', title: 'Testing' },
-          { path: 'patterns/deployment', title: 'Deployment' }
+          {path: "patterns/async-operations", title: "Async Operations"},
+          {path: "patterns/dependencies", title: "Dependencies"},
+          {path: "patterns/background-tasks", title: "Background Tasks"},
+          {path: "patterns/templates", title: "Templates"},
+          {path: "patterns/error-handling", title: "Error Handling"},
+          {path: "patterns/response-schema", title: "Response Schema"},
+          {path: "patterns/database", title: "Database"},
+          {path: "patterns/testing", title: "Testing"},
+          {path: "patterns/deployment", title: "Deployment"}
         ]
       }
     ]
@@ -97,37 +97,37 @@ end
 
 # Get the docs-site directory path relative to this script
 docs_site_dir = __dir__
-docs = DocsRenderer.new(content_dir: File.join(docs_site_dir, 'content'))
+docs = DocsRenderer.new(content_dir: File.join(docs_site_dir, "content"))
 templates = FunApi::Templates.new(
-  directory: File.join(docs_site_dir, 'templates'),
-  layout: 'layouts/docs.html.erb'
+  directory: File.join(docs_site_dir, "templates"),
+  layout: "layouts/docs.html.erb"
 )
 
 app = FunApi::App.new(
-  title: 'FunApi Documentation',
-  version: '0.1.0',
-  description: 'Documentation for the FunApi framework'
+  title: "FunApi Documentation",
+  version: "0.1.0",
+  description: "Documentation for the FunApi framework"
 ) do |api|
-  api.use Rack::Static, urls: ['/css'], root: File.join(docs_site_dir, 'public')
+  api.use Rack::Static, urls: ["/css"], root: File.join(docs_site_dir, "public")
   api.add_request_logger
 
-  api.get '/' do |_input, _req, _task|
-    page = docs.render('index')
+  api.get "/" do |_input, _req, _task|
+    page = docs.render("index")
     templates.response(
-      'page.html.erb',
-      title: page[:frontmatter][:title] || 'FunApi',
+      "page.html.erb",
+      title: page[:frontmatter][:title] || "FunApi",
       content: page[:html],
       nav: docs.navigation,
-      current_path: 'index'
+      current_path: "index"
     )
   end
 
-  api.get '/docs/:section/:page' do |input, _req, _task|
-    path = "#{input[:path]['section']}/#{input[:path]['page']}"
+  api.get "/docs/:section/:page" do |input, _req, _task|
+    path = "#{input[:path]["section"]}/#{input[:path]["page"]}"
     page = docs.render(path)
     templates.response(
-      'page.html.erb',
-      title: page[:frontmatter][:title] || 'FunApi',
+      "page.html.erb",
+      title: page[:frontmatter][:title] || "FunApi",
       content: page[:html],
       nav: docs.navigation,
       current_path: path
