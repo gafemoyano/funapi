@@ -2,7 +2,7 @@
 
 source "https://rubygems.org"
 
-# Specify your gem's dependencies in fun_api.gemspec
+# Specify your gem's dependencies in funapi.gemspec
 gemspec
 
 gem "irb"

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require_relative "../lib/fun_api"
-require_relative "../lib/fun_api/server/falcon"
+require_relative "../lib/funapi"
+require_relative "../lib/funapi/server/falcon"
 
 class DatabaseConnection
   attr_reader :id, :queries_run

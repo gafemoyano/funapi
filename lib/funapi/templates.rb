@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-require 'erb'
-require 'pathname'
-require_relative 'template_response'
-require_relative 'exceptions'
+require "erb"
+require "pathname"
+require_relative "template_response"
+require_relative "exceptions"
 
 module FunApi
   class Templates
@@ -62,7 +62,7 @@ module FunApi
       path = @directory.join(name)
       raise TemplateNotFoundError.new(name) unless path.exist?
 
-      @cache[name] ||= ERB.new(path.read, trim_mode: '-')
+      @cache[name] ||= ERB.new(path.read, trim_mode: "-")
     end
   end
 

@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-require 'fun_api'
-require 'fun_api/templates'
-require 'fun_api/server/falcon'
+require 'funapi'
+require 'funapi/templates'
+require 'funapi/server/falcon'
 require 'kramdown'
 require 'kramdown-parser-gfm'
 require 'rouge'

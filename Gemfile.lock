@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    fun_api (0.1.0)
+    funapi (0.1.0)
       async (>= 2.8)
       dry-container (>= 0.11)
       dry-schema (>= 1.13)
@@ -125,10 +125,6 @@ GEM
       rdoc (>= 4.0.0)
       reline (>= 0.4.2)
     json (2.15.1)
-    kramdown (2.5.1)
-      rexml (>= 3.3.9)
-    kramdown-parser-gfm (1.1.0)
-      kramdown (~> 2.0)
     language_server-protocol (3.17.0.5)
     lint_roller (1.1.0)
     localhost (1.6.0)
@@ -175,8 +171,6 @@ GEM
     regexp_parser (2.11.3)
     reline (0.6.2)
       io-console (~> 0.5)
-    rexml (3.4.4)
-    rouge (4.6.1)
     rubocop (1.80.2)
       json (~> 2.3)
       language_server-protocol (~> 3.17.0.2)
@@ -225,20 +219,15 @@ GEM
     zeitwerk (2.7.3)
 
 PLATFORMS
-  ruby
   x86_64-linux
 
 DEPENDENCIES
   db (~> 0.14)
   db-postgres (~> 0.9)
-  erb
-  fun_api!
+  funapi!
   irb
-  kramdown
-  kramdown-parser-gfm
   minitest (~> 5.16)
   rake (~> 13.0)
-  rouge
   standard (~> 1.3)
   testcontainers-postgres (~> 0.1)
 

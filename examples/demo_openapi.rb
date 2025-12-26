@@ -1,5 +1,5 @@
-require_relative "lib/fun_api"
-require_relative "lib/fun_api/server/falcon"
+require_relative "lib/funapi"
+require_relative "lib/funapi/server/falcon"
 
 UserCreateSchema = FunApi::Schema.define do
   required(:name).filled(:string)
