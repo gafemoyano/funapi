@@ -52,12 +52,36 @@ ruby app.rb
 # Open http://localhost:3000
 ```
 
-## Coming Soon
+### 🌐 [conduit-api](./conduit-api/)
 
-- **blog-app** - Multi-user blog with authentication and markdown
-- **api-server** - Pure JSON API with authentication
-- **realtime-chat** - WebSocket-based chat application
-- **file-upload** - File upload and processing example
+Full RealWorld "Conduit" API - A Medium.com clone following the official RealWorld spec:
+
+- **Complete RealWorld API** - All endpoints implemented
+- **JWT Authentication** - Secure token-based auth
+- **User Profiles** - Follow/unfollow users
+- **Articles** - Full CRUD with slugs, tags, favorites
+- **Comments** - Threaded discussions
+- **Feed** - Personalized article feed
+- **Modular Architecture** - Organized routes, models, services
+- **Production-Ready** - Password hashing, validation, error handling
+
+**Tech Stack:** FunApi, Sequel, PostgreSQL, JWT, BCrypt
+
+**How to run:**
+```bash
+# Create database
+createdb conduit
+
+cd conduit-api
+bundle install
+ruby db/migrate.rb
+ruby app.rb
+
+# Use with any RealWorld frontend!
+```
+
+**Frontend Integration:**
+Works with any [RealWorld frontend](https://codebase.show/projects/realworld) - React, Vue, Angular, etc.
 
 ## Purpose
 
