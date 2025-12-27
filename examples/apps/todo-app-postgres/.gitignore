@@ -1,0 +1,10 @@
+# Bundler
+.bundle/
+vendor/bundle/
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local

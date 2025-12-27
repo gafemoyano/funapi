@@ -1,0 +1,65 @@
+<section class="todoapp">
+  <header class="header">
+    <h1>todos</h1>
+    <form hx-post="/todos"
+          hx-target="#todo-list"
+          hx-swap="beforeend"
+          hx-on::after-request="this.reset()">
+      <input
+        class="new-todo"
+        name="title"
+        placeholder="What needs to be done?"
+        autofocus
+        required>
+    </form>
+  </header>
+
+  <% if todos.any? %>
+  <section class="main">
+    <input
+      id="toggle-all"
+      class="toggle-all"
+      type="checkbox"
+      <%= "checked" if active_count == 0 %>
+      hx-patch="/todos/toggle-all"
+      hx-target="#todo-list"
+      hx-swap="innerHTML">
+    <label for="toggle-all">Mark all as complete</label>
+
+    <ul id="todo-list" class="todo-list">
+      <% todos.each do |todo| %>
+        <%= render_partial("_todo.html.erb", todo: todo) %>
+      <% end %>
+    </ul>
+  </section>
+
+  <footer class="footer">
+    <span class="todo-count">
+      <strong><%= active_count %></strong>
+      <%= active_count == 1 ? "item" : "items" %> left
+    </span>
+
+    <ul class="filters">
+      <li>
+        <a href="/?filter=all" class="<%= "selected" if filter == "all" %>">All</a>
+      </li>
+      <li>
+        <a href="/?filter=active" class="<%= "selected" if filter == "active" %>">Active</a>
+      </li>
+      <li>
+        <a href="/?filter=completed" class="<%= "selected" if filter == "completed" %>">Completed</a>
+      </li>
+    </ul>
+
+    <% if completed_count > 0 %>
+    <button
+      class="clear-completed"
+      hx-delete="/todos/clear-completed"
+      hx-confirm="Clear all completed todos?"
+      hx-on::after-request="window.location.reload()">
+      Clear completed
+    </button>
+    <% end %>
+  </footer>
+  <% end %>
+</section>

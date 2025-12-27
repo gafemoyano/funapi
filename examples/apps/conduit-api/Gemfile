@@ -1,0 +1,22 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+# FunApi framework
+gem "funapi", path: "../../.."
+
+# Database
+gem "sequel", "~> 5.75"
+gem "pg", "~> 1.5"
+
+# Authentication
+gem "jwt", "~> 2.7"
+gem "bcrypt", "~> 3.1"
+
+# Server
+gem "falcon", "~> 0.47"
+
+# Development & Testing
+group :development, :test do
+  gem "rake", "~> 13.0"
+end
