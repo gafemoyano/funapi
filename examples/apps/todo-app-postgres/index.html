@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>todos</title>
+  <link rel="stylesheet" href="/public/style.css">
+</head>
+<body>
+  <section class="todoapp">
+    <header class="header">
+      <h1>todos</h1>
+      <form id="new-todo-form">
+        <input
+          id="new-todo-input"
+          class="new-todo"
+          placeholder="What needs to be done?"
+          autofocus>
+      </form>
+    </header>
+
+    <section class="main" id="main-section" style="display: none;">
+      <input id="toggle-all" class="toggle-all" type="checkbox">
+      <label for="toggle-all">Mark all as complete</label>
+      <ul id="todo-list" class="todo-list"></ul>
+    </section>
+
+    <footer class="footer" id="footer-section" style="display: none;">
+      <span class="todo-count">
+        <strong id="active-count">0</strong>
+        <span id="active-label">items</span> left
+      </span>
+      <ul class="filters">
+        <li>
+          <a href="#/" class="selected" data-filter="all">All</a>
+        </li>
+        <li>
+          <a href="#/active" data-filter="active">Active</a>
+        </li>
+        <li>
+          <a href="#/completed" data-filter="completed">Completed</a>
+        </li>
+      </ul>
+      <button class="clear-completed" id="clear-completed" style="display: none;">
+        Clear completed
+      </button>
+    </footer>
+  </section>
+
+  <footer class="info">
+    <p>Double-click to edit a todo</p>
+    <p>Created with <a href="https://github.com/gafemoyano/funapi">FunApi</a> + Async PostgreSQL</p>
+    <p>Part of <a href="http://todomvc.com">TodoMVC</a></p>
+  </footer>
+
+  <script src="/public/app.js"></script>
+</body>
+</html>

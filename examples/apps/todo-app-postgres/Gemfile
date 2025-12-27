@@ -1,0 +1,13 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+# FunApi framework
+gem "funapi", path: "../../.."
+
+# Database
+gem "db", "~> 0.14"
+gem "db-postgres", "~> 0.9"
+
+# Server
+gem "falcon", "~> 0.47"

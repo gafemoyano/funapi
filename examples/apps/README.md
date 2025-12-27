@@ -27,6 +27,31 @@ ruby app.rb
 # Open http://localhost:3000
 ```
 
+### 🐘 [todo-app-postgres](./todo-app-postgres/)
+
+The same TodoMVC app but with async PostgreSQL and vanilla JavaScript:
+
+- **Pure JSON API** - No server-side rendering
+- **Async PostgreSQL** with db-postgres
+- **Vanilla JavaScript SPA** - No HTMX, pure client-side
+- **Client-side routing** with hash navigation
+- **Fetch API** for HTTP requests
+- **Same TodoMVC features** - All CRUD operations
+- **Classic styling** - Identical UI/UX
+
+**Tech Stack:** FunApi, db-postgres, PostgreSQL, Vanilla JS (no frameworks)
+
+**How to run:**
+```bash
+# Ensure PostgreSQL is running
+createdb todos
+
+cd todo-app-postgres
+bundle install
+ruby app.rb
+# Open http://localhost:3000
+```
+
 ## Coming Soon
 
 - **blog-app** - Multi-user blog with authentication and markdown
