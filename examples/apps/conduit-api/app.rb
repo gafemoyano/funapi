@@ -47,6 +47,42 @@ app = FunApi::App.new(
   Routes::Articles.register(api)
   Routes::Comments.register(api)
   Routes::Tags.register(api)
+
+  # Serve static files from frontend/dist for non-API routes
+  # This handles the built React frontend
+  api.get "/{path:path}" do |input, _req, _task|
+    # If it's an API route, it will be handled by the routes above
+    # This catch-all serves the React app
+    frontend_dir = File.join(__dir__, "frontend", "dist")
+    requested_path = input[:path]["path"] || ""
+
+    # Try to serve the requested file
+    file_path = File.join(frontend_dir, requested_path)
+
+    if File.file?(file_path)
+      # Serve the file with appropriate content type
+      content_type = case File.extname(file_path)
+                     when ".html" then "text/html"
+                     when ".js" then "application/javascript"
+                     when ".css" then "text/css"
+                     when ".json" then "application/json"
+                     when ".png" then "image/png"
+                     when ".jpg", ".jpeg" then "image/jpeg"
+                     when ".svg" then "image/svg+xml"
+                     else "application/octet-stream"
+                     end
+
+      [File.read(file_path), 200, { "Content-Type" => content_type }]
+    else
+      # For client-side routing, serve index.html
+      index_path = File.join(frontend_dir, "index.html")
+      if File.file?(index_path)
+        [File.read(index_path), 200, { "Content-Type" => "text/html" }]
+      else
+        ["Frontend not built. Run: cd frontend && npm install && npm run build", 404]
+      end
+    end
+  end
 end
 
 # Startup message

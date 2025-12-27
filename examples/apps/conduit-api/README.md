@@ -1,12 +1,12 @@
-# Conduit API - RealWorld Example
+# Conduit - RealWorld Full-Stack Example
 
-A complete implementation of the [RealWorld](https://github.com/gothinkster/realworld) "Conduit" API specification using FunApi, Sequel, and PostgreSQL.
+A complete full-stack implementation of the [RealWorld](https://github.com/gothinkster/realworld) "Conduit" specification - a Medium.com clone built with FunApi (backend) and React 19 (frontend).
 
-**"The mother of all demo apps"** - A Medium.com clone showcasing a production-ready API with authentication, articles, comments, and social features.
+**"The mother of all demo apps"** - Showcasing a production-ready full-stack application with authentication, articles, comments, and social features.
 
 ## Overview
 
-This is a **full-stack backend API** that adheres to the [RealWorld API spec](https://realworld-docs.netlify.app/). It can be paired with any RealWorld frontend (React, Vue, Angular, etc.) for a complete application.
+This is a **complete full-stack application** with both backend API and React frontend that adheres to the [RealWorld spec](https://realworld-docs.netlify.app/).
 
 ### Key Features
 
@@ -29,14 +29,18 @@ This is a **full-stack backend API** that adheres to the [RealWorld API spec](ht
 - **JWT** - JSON Web Token authentication
 - **BCrypt** - Secure password hashing
 
-**Frontend (Separate):**
-- Use any [RealWorld frontend](https://codebase.show/projects/realworld)
-- Recommended: [React + Redux](https://github.com/gothinkster/react-redux-realworld-example-app)
+**Frontend:**
+- **React 19** - Latest React with hooks
+- **Vite** - Modern build tool and dev server
+- **Tailwind CSS** - Utility-first CSS framework
+- **Marked** - Markdown parser for article rendering
+- **No Router** - Simple state-based navigation (no React Router)
 
 ## Prerequisites
 
 - Ruby 3.2 or higher
 - PostgreSQL 12+
+- Node.js 18+ and npm
 - Bundler gem
 
 ## Installation
@@ -90,13 +94,33 @@ export JWT_SECRET=your-super-secret-key
 
 **Note:** In development, a default key is used. Change this in production!
 
-### 7. Start the Server
+### 7. Install Frontend Dependencies
+
+```bash
+cd frontend
+npm install
+cd ..
+```
+
+### 8. Build Frontend
+
+For production, build the React frontend:
+
+```bash
+cd frontend
+npm run build
+cd ..
+```
+
+This creates a production build in `frontend/dist/` that will be served by the backend.
+
+### 9. Start the Server
 
 ```bash
 ruby app.rb
 ```
 
-Server will start on `http://localhost:3000`
+Server will start on `http://localhost:3000` and serve both the API and the React frontend.
 
 ## API Documentation
 
@@ -260,7 +284,7 @@ GET /api/tags
 ```
 conduit-api/
 ├── app.rb                      # Main application entry point
-├── Gemfile                     # Dependencies
+├── Gemfile                     # Ruby dependencies
 ├── config/
 │   └── database.rb             # Sequel + PostgreSQL config
 ├── db/
@@ -270,8 +294,8 @@ conduit-api/
 │       ├── 002_create_articles.rb
 │       ├── 003_create_comments.rb
 │       ├── 004_create_tags.rb
-│       ├── 005_create_favorites.rb
-│       └── 006_create_follows.rb
+│       ├── 005_create_article_tags.rb
+│       └── 006_create_follows_and_favorites.rb
 ├── models/
 │   ├── user.rb                 # User model
 │   ├── article.rb              # Article model
@@ -285,10 +309,34 @@ conduit-api/
 │   ├── articles.rb             # Article routes
 │   ├── comments.rb             # Comment routes
 │   └── tags.rb                 # Tag routes
-└── schemas/
-    ├── user_schemas.rb         # User validation
-    ├── article_schemas.rb      # Article validation
-    └── comment_schemas.rb      # Comment validation
+├── schemas/
+│   ├── user_schemas.rb         # User validation
+│   ├── article_schemas.rb      # Article validation
+│   └── comment_schemas.rb      # Comment validation
+└── frontend/                   # React application
+    ├── package.json            # Frontend dependencies
+    ├── vite.config.js          # Vite configuration
+    ├── tailwind.config.js      # Tailwind CSS config
+    ├── index.html              # HTML entry point
+    ├── src/
+    │   ├── main.jsx            # React entry point
+    │   ├── App.jsx             # Main app component
+    │   ├── index.css           # Global styles
+    │   ├── components/         # React components
+    │   │   ├── Header.jsx
+    │   │   ├── Home.jsx
+    │   │   ├── Login.jsx
+    │   │   ├── Register.jsx
+    │   │   ├── ArticleDetail.jsx
+    │   │   ├── ArticlePreview.jsx
+    │   │   ├── Editor.jsx
+    │   │   ├── Profile.jsx
+    │   │   └── Settings.jsx
+    │   ├── hooks/
+    │   │   └── useAuth.js      # Auth context hook
+    │   └── services/
+    │       └── api.js          # API client
+    └── dist/                   # Built frontend (after npm run build)
 ```
 
 ## Database Schema
@@ -334,12 +382,43 @@ conduit-api/
 - `follower_id` (foreign key → users)
 - `followee_id` (foreign key → users)
 
-## Testing with Frontend
+## Running the Application
 
-### Option 1: Official React Frontend
+### Development Mode (with Hot Reload)
+
+For development, run the backend and frontend separately:
+
+**Terminal 1 - Backend:**
+```bash
+ruby app.rb
+```
+
+**Terminal 2 - Frontend (with hot reload):**
+```bash
+cd frontend
+npm run dev
+```
+
+The frontend dev server runs on `http://localhost:5173` and proxies API requests to the backend at `http://localhost:3000`.
+
+Visit `http://localhost:5173` to use the application with hot reload.
+
+### Production Mode
+
+In production, the backend serves the built frontend:
+
+1. Build the frontend: `cd frontend && npm run build`
+2. Start the backend: `ruby app.rb`
+3. Visit `http://localhost:3000`
+
+The backend automatically serves the React app from `frontend/dist/` for all non-API routes.
+
+## Testing with Other RealWorld Frontends
+
+You can also use any RealWorld frontend with this backend:
 
 ```bash
-# Clone the React frontend
+# Clone any RealWorld frontend
 git clone https://github.com/gothinkster/react-redux-realworld-example-app.git
 cd react-redux-realworld-example-app
 
@@ -351,11 +430,70 @@ npm install
 npm start
 ```
 
-### Option 2: Use Existing Demo Frontend
+## Frontend Architecture
 
-Visit any RealWorld frontend demo and point it to `http://localhost:3000/api`
+The React frontend uses a modern, hooks-based architecture without a router library:
 
-## FunApi Features Demonstrated
+### Key Features
+
+- **No Router Library**: Uses simple state-based navigation instead of React Router
+- **useAuth Hook**: Provides authentication context throughout the app
+- **API Service Layer**: Centralized API client in `services/api.js`
+- **Functional Components**: All components use hooks
+- **Tailwind CSS**: Utility-first styling
+- **Markdown Support**: Marked library for rendering article content
+
+### Main Files
+
+- `src/App.jsx` - Main app component with navigation logic
+- `src/hooks/useAuth.js` - Authentication context and methods (login, register, logout, updateUser)
+- `src/services/api.js` - API client with all endpoint methods
+- `src/components/Header.jsx` - Navigation header with auth state
+- `src/components/Home.jsx` - Home page with article feed and tags sidebar
+- `src/components/ArticleDetail.jsx` - Article view with markdown rendering and comments
+- `src/components/Editor.jsx` - Article create/edit form
+- `src/components/Profile.jsx` - User profile with articles and follow/unfollow
+- `src/components/Settings.jsx` - User settings and logout
+
+### Navigation Pattern
+
+Instead of React Router, the app uses simple state-based navigation:
+
+```javascript
+// In App.jsx
+const [currentPage, setCurrentPage] = useState('home');
+const [selectedArticle, setSelectedArticle] = useState(null);
+
+const navigate = (page, data = null) => {
+  setCurrentPage(page);
+  if (page === 'article') setSelectedArticle(data);
+};
+
+// Components receive onNavigate callback
+<Home onNavigate={navigate} />
+```
+
+This keeps the frontend simple and lightweight while still providing full navigation capabilities.
+
+### API Integration
+
+The API service handles all backend communication:
+
+```javascript
+// From services/api.js
+const token = getToken(); // From localStorage
+const headers = { 'Content-Type': 'application/json' };
+if (token) headers['Authorization'] = `Token ${token}`;
+
+// All endpoints are organized by resource
+export const auth = { register, login, getCurrentUser, updateUser };
+export const articles = { list, feed, get, create, update, delete, favorite, unfavorite };
+export const profiles = { get, follow, unfollow };
+export const comments = { list, create, delete };
+export const tags = { list };
+```
+
+## Backend Features Demonstrated
 
 1. **Modular Architecture** - Separate files for routes, models, services
 2. **Request Validation** - FunApi schemas for type safety
@@ -370,6 +508,7 @@ Visit any RealWorld frontend demo and point it to `http://localhost:3000/api`
 11. **JSON API** - RESTful API following RealWorld spec
 12. **Password Security** - BCrypt hashing
 13. **Token Auth** - JWT generation and verification
+14. **Static File Serving** - Serves built React frontend from dist/
 
 ## Development
 
