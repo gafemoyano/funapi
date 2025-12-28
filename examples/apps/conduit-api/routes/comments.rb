@@ -24,7 +24,7 @@ module Routes
           .all
           .map { |comment| comment.to_json_api(current_user_id: current_user_id) }
 
-        [{ comments: comments }, 200]
+        [{comments: comments}, 200]
       end
 
       # Create comment
@@ -46,11 +46,11 @@ module Routes
             author_id: current_user_id
           )
 
-          [{ comment: comment.to_json_api(current_user_id: current_user_id) }, 201]
+          [{comment: comment.to_json_api(current_user_id: current_user_id)}, 201]
         rescue Sequel::ValidationFailed => e
           raise FunApi::HTTPException.new(
             status_code: 422,
-            detail: { errors: { body: e.errors.full_messages } }
+            detail: {errors: {body: e.errors.full_messages}}
           )
         end
       end
@@ -79,7 +79,7 @@ module Routes
 
         comment.destroy
 
-        [{ message: "Comment deleted" }, 200]
+        [{message: "Comment deleted"}, 200]
       end
     end
   end

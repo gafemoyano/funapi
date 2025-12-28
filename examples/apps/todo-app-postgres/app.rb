@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-require_relative "../../../lib/funapi"
-require_relative "../../../lib/funapi/server/falcon"
-require_relative "./database"
+require "funapi"
+require "funapi/server/falcon"
+require_relative "database"
 
 # Initialize database on startup
 init_database!
@@ -47,16 +47,16 @@ app = FunApi::App.new(
 
   # Get all todos (with optional filter)
   api.get "/api/todos", query: FilterQuerySchema do |input, _req, _task|
-    filter = input[:query]["filter"] || "all"
+    filter = input[:query][:filter] || "all"
 
     todos = case filter
-            when "active"
-              TodoRepository.active
-            when "completed"
-              TodoRepository.completed
-            else
-              TodoRepository.all
-            end
+    when "active"
+      TodoRepository.active
+    when "completed"
+      TodoRepository.completed
+    else
+      TodoRepository.all
+    end
 
     stats = {
       active_count: TodoRepository.active_count,
@@ -64,7 +64,7 @@ app = FunApi::App.new(
       total_count: todos.length
     }
 
-    [{ todos: todos, stats: stats }, 200]
+    [{todos: todos, stats: stats}, 200]
   end
 
   # Create a new todo
@@ -78,9 +78,7 @@ app = FunApi::App.new(
     todo_id = input[:path]["id"].to_i
     todo = TodoRepository.find(todo_id)
 
-    unless todo
-      raise FunApi::HTTPException.new(status_code: 404, detail: "Todo not found")
-    end
+    raise FunApi::HTTPException.new(status_code: 404, detail: "Todo not found") unless todo
 
     [todo, 200]
   end
@@ -94,9 +92,7 @@ app = FunApi::App.new(
 
     todo = TodoRepository.update(todo_id, attrs)
 
-    unless todo
-      raise FunApi::HTTPException.new(status_code: 404, detail: "Todo not found")
-    end
+    raise FunApi::HTTPException.new(status_code: 404, detail: "Todo not found") unless todo
 
     [todo, 200]
   end
@@ -106,17 +102,15 @@ app = FunApi::App.new(
     todo_id = input[:path]["id"].to_i
     deleted = TodoRepository.delete(todo_id)
 
-    unless deleted
-      raise FunApi::HTTPException.new(status_code: 404, detail: "Todo not found")
-    end
+    raise FunApi::HTTPException.new(status_code: 404, detail: "Todo not found") unless deleted
 
-    [{ message: "Todo deleted" }, 200]
+    [{message: "Todo deleted"}, 200]
   end
 
   # Clear all completed todos
   api.delete "/api/todos/completed/all" do |_input, _req, _task|
     TodoRepository.clear_completed
-    [{ message: "Completed todos cleared" }, 200]
+    [{message: "Completed todos cleared"}, 200]
   end
 
   # Toggle all todos
@@ -125,7 +119,7 @@ app = FunApi::App.new(
     TodoRepository.toggle_all(completed)
 
     todos = TodoRepository.all
-    [{ todos: todos }, 200]
+    [{todos: todos}, 200]
   end
 end
 

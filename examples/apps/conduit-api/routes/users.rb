@@ -18,16 +18,16 @@ module Routes
             password: user_params[:password]
           )
 
-          [{ user: user.to_auth_json }, 201]
+          [{user: user.to_auth_json}, 201]
         rescue Sequel::ValidationFailed => e
           raise FunApi::HTTPException.new(
             status_code: 422,
-            detail: { errors: { body: e.errors.full_messages } }
+            detail: {errors: {body: e.errors.full_messages}}
           )
         rescue Sequel::UniqueConstraintViolation
           raise FunApi::HTTPException.new(
             status_code: 422,
-            detail: { errors: { body: ["Email or username already taken"] } }
+            detail: {errors: {body: ["Email or username already taken"]}}
           )
         end
       end
@@ -41,11 +41,11 @@ module Routes
         unless user&.authenticate(user_params[:password])
           raise FunApi::HTTPException.new(
             status_code: 401,
-            detail: { errors: { body: ["Email or password is invalid"] } }
+            detail: {errors: {body: ["Email or password is invalid"]}}
           )
         end
 
-        [{ user: user.to_auth_json }, 200]
+        [{user: user.to_auth_json}, 200]
       end
 
       # Get current user
@@ -57,7 +57,7 @@ module Routes
           raise FunApi::HTTPException.new(status_code: 404, detail: "User not found")
         end
 
-        [{ user: user.to_auth_json }, 200]
+        [{user: user.to_auth_json}, 200]
       end
 
       # Update current user
@@ -83,11 +83,11 @@ module Routes
 
         begin
           user.update(attrs)
-          [{ user: user.to_auth_json }, 200]
+          [{user: user.to_auth_json}, 200]
         rescue Sequel::ValidationFailed => e
           raise FunApi::HTTPException.new(
             status_code: 422,
-            detail: { errors: { body: e.errors.full_messages } }
+            detail: {errors: {body: e.errors.full_messages}}
           )
         end
       end

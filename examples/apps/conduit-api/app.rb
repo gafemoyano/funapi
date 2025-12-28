@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require_relative "../../../lib/funapi"
-require_relative "../../../lib/funapi/server/falcon"
+require "funapi"
+require "funapi/server/falcon"
 
 # Load database configuration
 require_relative "config/database"
@@ -28,8 +28,8 @@ app = FunApi::App.new(
   # Enable CORS for frontend
   api.add_cors(
     allow_origins: ["*"],
-    allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers: ["Authorization", "Content-Type"]
+    allow_methods: %w[GET POST PUT DELETE OPTIONS],
+    allow_headers: %w[Authorization Content-Type]
   )
 
   # Health check endpoint
@@ -62,22 +62,22 @@ app = FunApi::App.new(
     if File.file?(file_path)
       # Serve the file with appropriate content type
       content_type = case File.extname(file_path)
-                     when ".html" then "text/html"
-                     when ".js" then "application/javascript"
-                     when ".css" then "text/css"
-                     when ".json" then "application/json"
-                     when ".png" then "image/png"
-                     when ".jpg", ".jpeg" then "image/jpeg"
-                     when ".svg" then "image/svg+xml"
-                     else "application/octet-stream"
-                     end
+      when ".html" then "text/html"
+      when ".js" then "application/javascript"
+      when ".css" then "text/css"
+      when ".json" then "application/json"
+      when ".png" then "image/png"
+      when ".jpg", ".jpeg" then "image/jpeg"
+      when ".svg" then "image/svg+xml"
+      else "application/octet-stream"
+      end
 
-      [File.read(file_path), 200, { "Content-Type" => content_type }]
+      [File.read(file_path), 200, {"Content-Type" => content_type}]
     else
       # For client-side routing, serve index.html
       index_path = File.join(frontend_dir, "index.html")
       if File.file?(index_path)
-        [File.read(index_path), 200, { "Content-Type" => "text/html" }]
+        [File.read(index_path), 200, {"Content-Type" => "text/html"}]
       else
         ["Frontend not built. Run: cd frontend && npm install && npm run build", 404]
       end

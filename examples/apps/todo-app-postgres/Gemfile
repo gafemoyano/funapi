@@ -3,7 +3,7 @@
 source "https://rubygems.org"
 
 # FunApi framework
-gem "funapi", path: "../../.."
+gem "funapi", github: "gafemoyano/funapi"
 
 # Database
 gem "db", "~> 0.14"

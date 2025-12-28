@@ -4,7 +4,7 @@
     <form hx-post="/todos"
           hx-target="#todo-list"
           hx-swap="beforeend"
-          hx-on::after-request="this.reset()">
+          hx-on::after-request="this.reset(); document.querySelector('.main').style.display = 'block'; document.querySelector('.footer').style.display = 'flex';">
       <input
         class="new-todo"
         name="title"
@@ -14,13 +14,12 @@
     </form>
   </header>
 
-  <% if todos.any? %>
-  <section class="main">
+  <section class="main" style="<%= 'display: none;' unless todos.any? %>">
     <input
       id="toggle-all"
       class="toggle-all"
       type="checkbox"
-      <%= "checked" if active_count == 0 %>
+      <%= "checked" if active_count == 0 && todos.any? %>
       hx-patch="/todos/toggle-all"
       hx-target="#todo-list"
       hx-swap="innerHTML">
@@ -33,7 +32,7 @@
     </ul>
   </section>
 
-  <footer class="footer">
+  <footer class="footer" style="<%= 'display: none;' unless todos.any? %>">
     <span class="todo-count">
       <strong><%= active_count %></strong>
       <%= active_count == 1 ? "item" : "items" %> left
@@ -61,5 +60,4 @@
     </button>
     <% end %>
   </footer>
-  <% end %>
 </section>

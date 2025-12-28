@@ -136,7 +136,7 @@ module TodoRepository
 
   def clear_completed
     session = DatabaseConfig.client.session
-    result = session.call("DELETE FROM todos WHERE completed = TRUE")
+    session.call("DELETE FROM todos WHERE completed = TRUE")
     session.close
     true
   end

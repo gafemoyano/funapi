@@ -17,7 +17,7 @@ module Routes
           raise FunApi::HTTPException.new(status_code: 404, detail: "Profile not found")
         end
 
-        [{ profile: user.to_profile_json(current_user_id: current_user_id) }, 200]
+        [{profile: user.to_profile_json(current_user_id: current_user_id)}, 200]
       end
 
       # Follow user
@@ -40,7 +40,7 @@ module Routes
 
         user.follow!(current_user_id)
 
-        [{ profile: user.to_profile_json(current_user_id: current_user_id) }, 200]
+        [{profile: user.to_profile_json(current_user_id: current_user_id)}, 200]
       end
 
       # Unfollow user
@@ -56,7 +56,7 @@ module Routes
 
         user.unfollow!(current_user_id)
 
-        [{ profile: user.to_profile_json(current_user_id: current_user_id) }, 200]
+        [{profile: user.to_profile_json(current_user_id: current_user_id)}, 200]
       end
     end
   end

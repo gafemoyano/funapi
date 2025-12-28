@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-require_relative "../../../lib/funapi"
-require_relative "../../../lib/fun_api/templates"
-require_relative "../../../lib/funapi/server/falcon"
-require_relative "./database"
+require "funapi"
+require "funapi/templates"
+require "funapi/server/falcon"
+require_relative "database"
 
 # Request schemas
 TodoCreateSchema = FunApi::Schema.define do
@@ -38,16 +38,16 @@ app = FunApi::App.new(
 
   # Main page - list todos with optional filter
   api.get "/", query: FilterQuerySchema do |input, _req, _task|
-    filter = input[:query]["filter"] || "all"
+    filter = input[:query][:filter] || "all"
 
     todos = case filter
-            when "active"
-              TodoRepository.active
-            when "completed"
-              TodoRepository.completed
-            else
-              TodoRepository.all
-            end
+    when "active"
+      TodoRepository.active
+    when "completed"
+      TodoRepository.completed
+    else
+      TodoRepository.all
+    end
 
     templates.response("index.html.erb",
       title: "todos",
@@ -76,9 +76,7 @@ app = FunApi::App.new(
 
     todo = TodoRepository.update(todo_id, attrs)
 
-    unless todo
-      raise FunApi::HTTPException.new(status_code: 404, detail: "Todo not found")
-    end
+    raise FunApi::HTTPException.new(status_code: 404, detail: "Todo not found") unless todo
 
     templates.response("_todo.html.erb",
       layout: false,
@@ -90,9 +88,7 @@ app = FunApi::App.new(
     todo_id = input[:path]["id"].to_i
     deleted = TodoRepository.delete(todo_id)
 
-    unless deleted
-      raise FunApi::HTTPException.new(status_code: 404, detail: "Todo not found")
-    end
+    raise FunApi::HTTPException.new(status_code: 404, detail: "Todo not found") unless deleted
 
     FunApi::TemplateResponse.new("", status: 200)
   end
@@ -104,7 +100,7 @@ app = FunApi::App.new(
   end
 
   # Toggle all todos
-  api.patch "/todos/toggle-all" do |input, _req, _task|
+  api.patch "/todos/toggle-all" do |_input, _req, _task|
     # If any active todos exist, mark all as complete; otherwise mark all as incomplete
     all_completed = TodoRepository.active_count.zero?
     TodoRepository.toggle_all(!all_completed)

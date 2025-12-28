@@ -20,7 +20,7 @@ class User < Sequel::Model
     validates_presence [:email, :username, :password_hash]
     validates_unique :email
     validates_unique :username
-    validates_format /\A[^@\s]+@[^@\s]+\z/, :email, message: "is not a valid email"
+    validates_format(/\A[^@\s]+@[^@\s]+\z/, :email, message: "is not a valid email")
     validates_min_length 3, :username
   end
 

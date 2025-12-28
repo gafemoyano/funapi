@@ -8,7 +8,7 @@ module Routes
       # Get all tags
       api.get "/api/tags" do |_input, _req, _task|
         tags = Tag.all.map(&:name)
-        [{ tags: tags }, 200]
+        [{tags: tags}, 200]
       end
     end
   end
