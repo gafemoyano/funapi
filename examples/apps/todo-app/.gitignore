@@ -1,0 +1,12 @@
+# SQLite database
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Bundler
+.bundle/
+vendor/bundle/
+
+# Logs
+*.log

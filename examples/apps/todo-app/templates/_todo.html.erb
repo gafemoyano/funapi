@@ -1,0 +1,24 @@
+<li id="todo-<%= todo.id %>" class="<%= "completed" if todo.completed %>" data-todo-id="<%= todo.id %>">
+  <div class="view">
+    <input
+      class="toggle"
+      type="checkbox"
+      <%= "checked" if todo.completed %>
+      hx-patch="/todos/<%= todo.id %>"
+      hx-vals='{"completed": <%= !todo.completed %>}'
+      hx-target="#todo-<%= todo.id %>"
+      hx-swap="outerHTML">
+    <label ondblclick="editTodo(<%= todo.id %>)"><%= todo.title %></label>
+    <button
+      class="destroy"
+      hx-delete="/todos/<%= todo.id %>"
+      hx-target="#todo-<%= todo.id %>"
+      hx-swap="outerHTML swap:0.5s"></button>
+  </div>
+  <input
+    class="edit"
+    id="edit-<%= todo.id %>"
+    value="<%= todo.title %>"
+    onblur="cancelEdit(<%= todo.id %>)"
+    onkeydown="handleEditKeydown(event, <%= todo.id %>)">
+</li>
