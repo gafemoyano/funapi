@@ -84,6 +84,7 @@ button {
   -webkit-text-rendering: optimizeLegibility;
   -moz-text-rendering: optimizeLegibility;
   text-rendering: optimizeLegibility;
+  pointer-events: none;
 }
 
 .new-todo,
@@ -285,6 +286,7 @@ button {
               0 9px 1px -3px rgba(0, 0, 0, 0.2),
               0 16px 0 -6px var(--background),
               0 17px 2px -6px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
 }
 
 .todo-count {
