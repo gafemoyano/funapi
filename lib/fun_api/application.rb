@@ -13,10 +13,11 @@ require_relative 'depends'
 require_relative 'dependency_wrapper'
 require_relative 'background_tasks'
 require_relative 'openapi/spec_generator'
+require_relative 'introspection'
 
 module FunApi
   class App
-    attr_reader :openapi_config, :container
+    attr_reader :openapi_config, :container, :router, :middleware_stack
 
     def initialize(title: 'FunApi Application', version: '1.0.0', description: '')
       @router = Router.new
@@ -50,6 +51,10 @@ module FunApi
 
     def resolve(key)
       @container.resolve(key)
+    end
+
+    def introspect
+      @introspector ||= Introspection::Inspector.new(self)
     end
 
     def get(path, query: nil, response_schema: nil, depends: nil, &blk)
