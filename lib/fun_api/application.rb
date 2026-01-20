@@ -28,10 +28,12 @@ module FunApi
         version: version,
         description: description
       }
+      @introspection_endpoints_enabled = nil
 
       yield self if block_given?
 
       register_openapi_routes
+      setup_introspection_endpoints if introspection_endpoints_enabled?
     end
 
     def register(key, &block)
@@ -55,6 +57,24 @@ module FunApi
 
     def introspect
       @introspector ||= Introspection::Inspector.new(self)
+    end
+
+    def enable_introspection_endpoints
+      @introspection_endpoints_enabled = true
+      setup_introspection_endpoints unless @introspection_endpoints_setup
+    end
+
+    def disable_introspection_endpoints
+      @introspection_endpoints_enabled = false
+    end
+
+    def introspection_endpoints_enabled?
+      return @introspection_endpoints_enabled unless @introspection_endpoints_enabled.nil?
+
+      env = ENV['RACK_ENV'] || ENV['FUNAPI_ENV'] || 'development'
+      force_enabled = ENV['FUNAPI_INTROSPECTION'] == 'enabled'
+
+      force_enabled || env != 'production'
     end
 
     def get(path, query: nil, response_schema: nil, depends: nil, &blk)
@@ -419,6 +439,14 @@ module FunApi
         status_code: 500,
         detail: "Dependency resolution failed: #{e.message}"
       )
+    end
+
+    def setup_introspection_endpoints
+      return if @introspection_endpoints_setup
+
+      require_relative 'introspection/endpoints'
+      Introspection::Endpoints.register(self)
+      @introspection_endpoints_setup = true
     end
 
     def register_openapi_routes
