@@ -89,24 +89,24 @@ module FunApi
       @container.resolve(key)
     end
 
-    def get(path, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("GET", path, query: query, response_schema: response_schema, depends: depends, &blk)
+    def get(route_path, path: nil, query: nil, response_schema: nil, depends: nil, &blk)
+      add_route("GET", route_path, path: path, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
-    def post(path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("POST", path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
+    def post(route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
+      add_route("POST", route_path, path: path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
-    def put(path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("PUT", path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
+    def put(route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
+      add_route("PUT", route_path, path: path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
-    def patch(path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("PATCH", path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
+    def patch(route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
+      add_route("PATCH", route_path, path: path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
-    def delete(path, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("DELETE", path, query: query, response_schema: response_schema, depends: depends, &blk)
+    def delete(route_path, path: nil, query: nil, response_schema: nil, depends: nil, &blk)
+      add_route("DELETE", route_path, path: path, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
     def use(middleware, *args, &block)
@@ -191,20 +191,21 @@ module FunApi
 
     private
 
-    def add_route(verb, path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
+    def add_route(verb, route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
       metadata = {
+        path_schema: path,
         body_schema: body,
         query_schema: query,
         response_schema: response_schema,
         dependencies: normalize_dependencies(depends)
       }
 
-      @router.add(verb, path, metadata: metadata) do |req, path_params|
-        handle_async_route(req, path_params, body, query, response_schema, metadata[:dependencies], &blk)
+      @router.add(verb, route_path, metadata: metadata) do |req, path_params|
+        handle_async_route(req, path_params, path, body, query, response_schema, metadata[:dependencies], &blk)
       end
     end
 
-    def handle_async_route(req, path_params, body_schema, query_schema, response_schema, dependencies, &blk)
+    def handle_async_route(req, path_params, path_schema, body_schema, query_schema, response_schema, dependencies, &blk)
       current_task = Async::Task.current
       Fiber[:async_task] = current_task
       cleanup_objects = []
@@ -218,6 +219,8 @@ module FunApi
           body: parse_body(req),
           headers: extract_headers(req.env)
         }
+
+        input[:path] = Schema.validate(path_schema, input[:path], location: "path") if path_schema
 
         input[:query] = Schema.validate(query_schema, input[:query], location: "query") if query_schema
 

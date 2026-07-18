@@ -217,6 +217,63 @@ class TestValidation < Minitest::Test
     assert_equal ["body"], data[:detail].first[:loc]
   end
 
+  def test_path_param_coercion
+    path_schema = FunApi::Schema.define do
+      required(:id).filled(:integer)
+    end
+
+    app = FunApi::App.new do |api|
+      api.get "/users/:id", path: path_schema do |input, _req, _task|
+        [{id: input[:path][:id], type: input[:path][:id].class.to_s}, 200]
+      end
+    end
+
+    res = async_request(app, :get, "/users/42")
+
+    assert_equal 200, res.status
+    data = parse(res)
+    assert_equal 42, data[:id]
+    assert_equal "Integer", data[:type]
+  end
+
+  def test_path_param_validation_failure
+    path_schema = FunApi::Schema.define do
+      required(:id).filled(:integer)
+    end
+
+    app = FunApi::App.new do |api|
+      api.get "/users/:id", path: path_schema do |input, _req, _task|
+        [{id: input[:path][:id]}, 200]
+      end
+    end
+
+    res = async_request(app, :get, "/users/not-a-number")
+
+    assert_equal 422, res.status
+    data = parse(res)
+    assert(data[:detail].any? { |e| e[:loc].include?("id") })
+  end
+
+  def test_typed_path_param_in_openapi
+    path_schema = FunApi::Schema.define do
+      required(:id).filled(:integer)
+    end
+
+    app = FunApi::App.new do |api|
+      api.get "/users/:id", path: path_schema do |input, _req, _task|
+        [{id: input[:path][:id]}, 200]
+      end
+    end
+
+    res = async_request(app, :get, "/openapi.json")
+    spec = parse(res)
+    param = spec[:paths][:"/users/{id}"][:get][:parameters].first
+
+    assert_equal "id", param[:name]
+    assert_equal "path", param[:in]
+    assert_equal "integer", param[:schema][:type]
+  end
+
   def test_array_body_validation
     item_schema = FunApi::Schema.define do
       required(:name).filled(:string)
