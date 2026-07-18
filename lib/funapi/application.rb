@@ -102,6 +102,10 @@ module FunApi
     end
 
     def use(middleware, *args, &block)
+      if @middleware_chain
+        raise "Cannot add middleware after the application has started handling requests"
+      end
+
       @middleware_stack << [middleware, args, block]
       self
     end
@@ -135,8 +139,8 @@ module FunApi
     end
 
     def call(env)
-      app = build_middleware_chain
-      app.call(env)
+      @middleware_chain ||= build_middleware_chain
+      @middleware_chain.call(env)
     end
 
     # Run the app with Falcon
