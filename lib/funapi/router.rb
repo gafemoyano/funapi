@@ -88,14 +88,15 @@ module FunApi
       when Hash
         depends.transform_keys(&:to_sym)
       else
-        raise ArgumentError, "depends must be an Array or Hash"
+        raise ArgumentError,
+          "depends must be an Array of names (e.g. [:db]) or a Hash (e.g. {db: FunApi.Depends(...)}); got #{depends.class}"
       end
     end
 
     private
 
     def add(verb, path, path_schema: nil, body_schema: nil, query_schema: nil, response_schema: nil, depends: nil, tags: nil, &block)
-      raise ArgumentError, "#{verb} requires a block" unless block
+      raise ArgumentError, "#{verb} #{path.inspect} requires a handler block, e.g. #{verb}(#{path.inspect}) { |input, req| [payload, status] }" unless block
 
       @routes << RouteDefinition.new(
         verb: verb.to_s.upcase,

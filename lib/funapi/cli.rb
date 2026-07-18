@@ -21,6 +21,8 @@ module FunApi
         Commands::Dev.new(argv, original_argv: original).run
       when "routes"
         Commands::Routes.new(argv).run
+      when "check"
+        Commands::Check.new(argv).run
       when "version", "-v", "--version"
         puts "funapi #{FunApi::VERSION}"
         0
@@ -44,6 +46,7 @@ module FunApi
           new NAME              Scaffold a new FunApi application
           dev [--port] [--bind] Boot the app under Falcon with code reloading
           routes [--json]       Print the route table
+          check [--json]        Verify the app boots, schemas/OpenAPI generate, and spec drift
           version               Print the FunApi version
 
         Run 'funapi <command> --help' for command-specific options.
@@ -66,7 +69,7 @@ module FunApi
           require app_rb
           find_app
         else
-          raise "No config.ru or app.rb found in #{dir}"
+          raise "No config.ru or app.rb found in #{dir}. Run this command from your app's root, or scaffold one with 'funapi new NAME'."
         end
       end
 
@@ -86,7 +89,7 @@ module FunApi
         end
 
         instance = ObjectSpace.each_object(FunApi::App).first
-        raise "Could not locate a FunApi::App instance (expected an 'Application' constant)" unless instance
+        raise "Could not locate a FunApi::App instance. Assign your app to the 'Application' constant, e.g. Application = FunApi::App.new { |api| ... }." unless instance
         instance
       end
     end
@@ -263,6 +266,140 @@ module FunApi
 
         def format_row(cells, widths)
           cells.each_index.map { |i| cells[i].to_s.ljust(widths[i]) }.join("  ").rstrip
+        end
+      end
+
+      class Check
+        include Loader
+
+        SNAPSHOT_FILE = "openapi.snapshot.json"
+
+        def initialize(argv, dir: Dir.pwd)
+          @argv = argv
+          @dir = dir
+          @json = false
+          @update_snapshot = false
+        end
+
+        def run
+          parse!
+          return report_update if @update_snapshot
+
+          report(run_checks)
+        end
+
+        private
+
+        def parse!
+          OptionParser.new do |opts|
+            opts.banner = "Usage: funapi check [--json] [--update-snapshot]"
+            opts.on("--json", "Emit machine-readable JSON") { @json = true }
+            opts.on("--update-snapshot", "Write the current OpenAPI spec to #{SNAPSHOT_FILE}") { @update_snapshot = true }
+          end.parse!(@argv)
+        end
+
+        def run_checks
+          checks = []
+
+          app = begin
+            load_app(@dir)
+          rescue => e
+            checks << {name: "boot", ok: false, detail: e.message}
+            return checks
+          end
+
+          routes = app.routes
+          checks << {name: "routes", ok: true, detail: "#{routes.size} route(s) loaded"}
+
+          checks << check_schemas(app)
+
+          spec, spec_check = check_openapi(app)
+          checks << spec_check
+
+          checks << check_drift(spec) if spec
+
+          checks
+        end
+
+        def check_schemas(app)
+          failures = []
+          app.schemas.each do |schema|
+            next unless schema.is_a?(Class) && schema < FunApi::Model
+
+            begin
+              schema.json_schema
+            rescue => e
+              failures << "#{schema_label(schema)}: #{e.message}"
+            end
+          end
+
+          if failures.empty?
+            {name: "schemas", ok: true, detail: "all model JSON schemas generate"}
+          else
+            {name: "schemas", ok: false, detail: failures.join("; ")}
+          end
+        end
+
+        def check_openapi(app)
+          spec = app.openapi_spec
+          parsed = JSON.parse(JSON.dump(spec))
+          [parsed, {name: "openapi", ok: true, detail: "spec generates and is valid JSON"}]
+        rescue => e
+          [nil, {name: "openapi", ok: false, detail: e.message}]
+        end
+
+        def check_drift(spec)
+          path = File.join(@dir, SNAPSHOT_FILE)
+          unless File.exist?(path)
+            return {name: "spec-drift", ok: true, detail: "no snapshot (run 'funapi check --update-snapshot' to create #{SNAPSHOT_FILE})"}
+          end
+
+          snapshot = JSON.parse(File.read(path))
+          if snapshot == spec
+            {name: "spec-drift", ok: true, detail: "spec matches #{SNAPSHOT_FILE}"}
+          else
+            {name: "spec-drift", ok: false, detail: "spec differs from #{SNAPSHOT_FILE} (run 'funapi check --update-snapshot' if intended)"}
+          end
+        rescue => e
+          {name: "spec-drift", ok: false, detail: e.message}
+        end
+
+        def report_update
+          app = load_app(@dir)
+          spec = app.openapi_spec
+          path = File.join(@dir, SNAPSHOT_FILE)
+          File.write(path, "#{JSON.pretty_generate(JSON.parse(JSON.dump(spec)))}\n")
+          if @json
+            require "json"
+            puts JSON.generate(status: "ok", checks: [{name: "snapshot", ok: true, detail: "wrote #{SNAPSHOT_FILE}"}])
+          else
+            puts "✓ snapshot        wrote #{SNAPSHOT_FILE}"
+          end
+          0
+        rescue => e
+          warn "funapi check: #{e.message}"
+          1
+        end
+
+        def report(checks)
+          ok = checks.all? { |c| c[:ok] }
+
+          if @json
+            require "json"
+            puts JSON.generate(status: ok ? "ok" : "failed", checks: checks)
+          else
+            checks.each do |check|
+              mark = check[:ok] ? "✓" : "✗"
+              puts "#{mark} #{check[:name].ljust(12)} #{check[:detail]}"
+            end
+            puts(ok ? "\nAll checks passed." : "\nSome checks failed.")
+          end
+
+          ok ? 0 : 1
+        end
+
+        def schema_label(schema)
+          schema.name || "Model"
         end
       end
 

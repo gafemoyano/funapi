@@ -130,6 +130,74 @@ class TestCLI < Minitest::Test
     end
   end
 
+  def test_check_passes_on_green_app
+    with_scaffold do |app_dir, _output|
+      output, status = run_cli("check", chdir: app_dir)
+      assert status.success?, output
+      assert_includes output, "routes"
+      assert_includes output, "schemas"
+      assert_includes output, "openapi"
+      assert_includes output, "spec-drift"
+      assert_includes output, "All checks passed."
+    end
+  end
+
+  def test_check_json_output
+    with_scaffold do |app_dir, _output|
+      output, status = run_cli("check", "--json", chdir: app_dir)
+      assert status.success?, output
+      result = JSON.parse(output, symbolize_names: true)
+      assert_equal "ok", result[:status]
+      names = result[:checks].map { |c| c[:name] }
+      assert_includes names, "routes"
+      assert_includes names, "openapi"
+      assert(result[:checks].all? { |c| c[:ok] })
+    end
+  end
+
+  def test_check_update_snapshot_writes
+    with_scaffold do |app_dir, _output|
+      output, status = run_cli("check", "--update-snapshot", chdir: app_dir)
+      assert status.success?, output
+      snapshot = File.join(app_dir, "openapi.snapshot.json")
+      assert File.exist?(snapshot), "snapshot not written"
+      spec = JSON.parse(File.read(snapshot))
+      assert_equal "3.0.3", spec["openapi"]
+    end
+  end
+
+  def test_check_fails_on_drifted_snapshot
+    with_scaffold do |app_dir, _output|
+      _out, status = run_cli("check", "--update-snapshot", chdir: app_dir)
+      assert status.success?
+
+      snapshot = File.join(app_dir, "openapi.snapshot.json")
+      spec = JSON.parse(File.read(snapshot))
+      spec["paths"]["/drifted"] = {"get" => {}}
+      File.write(snapshot, JSON.pretty_generate(spec))
+
+      output, status = run_cli("check", chdir: app_dir)
+      refute status.success?, output
+      assert_includes output, "spec-drift"
+      assert_includes output, "differs"
+    end
+  end
+
+  def test_check_json_fails_on_drift
+    with_scaffold do |app_dir, _output|
+      run_cli("check", "--update-snapshot", chdir: app_dir)
+      snapshot = File.join(app_dir, "openapi.snapshot.json")
+      spec = JSON.parse(File.read(snapshot))
+      spec["info"]["title"] = "Something Else Entirely"
+      File.write(snapshot, JSON.pretty_generate(spec))
+
+      output, status = run_cli("check", "--json", chdir: app_dir)
+      refute status.success?, output
+      result = JSON.parse(output, symbolize_names: true)
+      assert_equal "failed", result[:status]
+    end
+  end
+
   def stop_process(pid)
     Process.kill("TERM", pid)
     Timeout.timeout(5) { Process.wait(pid) }

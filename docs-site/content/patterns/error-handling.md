@@ -4,7 +4,9 @@ title: Error Handling
 
 # Error Handling
 
-FunApi provides FastAPI-style error responses.
+FunApi provides FastAPI-style error responses. For the complete contract — every
+error shape (400/404/422/426/500 and dev-mode variants) an API consumer or agent
+can encounter — see the [Errors Reference](/docs/patterns/errors-reference).
 
 ## HTTPException
 

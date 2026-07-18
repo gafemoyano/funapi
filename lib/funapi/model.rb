@@ -14,7 +14,9 @@ module FunApi
 
         unknown = options.keys - VALID_OPTIONS
         unless unknown.empty?
-          raise ArgumentError, "unknown option(s) for field #{name}: #{unknown.join(", ")}"
+          raise ArgumentError,
+            "unknown option(s) for field #{name}: #{unknown.join(", ")}. " \
+            "Valid options are: #{VALID_OPTIONS.join(", ")}"
         end
 
         validate_type!(name, type)
@@ -139,7 +141,8 @@ module FunApi
       def validate_type!(name, type)
         if type.is_a?(Array)
           unless type.length == 1
-            raise ArgumentError, "array type for field #{name} must have exactly one element"
+            raise ArgumentError,
+              "array type for field #{name} must wrap exactly one element type, e.g. [:string] or [Tag]; got #{type.inspect}"
           end
 
           validate_type!(name, type.first)
@@ -149,7 +152,10 @@ module FunApi
         return if PRIMITIVE_TYPES.include?(type)
         return if model_type?(type)
 
-        raise ArgumentError, "unknown type #{type.inspect} for field #{name}"
+        raise ArgumentError,
+          "unknown type #{type.inspect} for field #{name}. " \
+          "Use a primitive (#{PRIMITIVE_TYPES.join(", ")}), a FunApi::Model subclass, " \
+          "or a single-element array like [:string] for collections"
       end
 
       def default_value(value)
