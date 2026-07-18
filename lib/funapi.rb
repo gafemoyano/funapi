@@ -3,6 +3,7 @@
 require_relative "funapi/version"
 require_relative "funapi/exceptions"
 require_relative "funapi/schema"
+require_relative "funapi/model"
 require_relative "funapi/depends"
 require_relative "funapi/dependency_wrapper"
 require_relative "funapi/router"
