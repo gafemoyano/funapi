@@ -33,6 +33,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "async", ">= 2.8"
+  spec.add_dependency "async-websocket", ">= 0.30"
   spec.add_dependency "dry-container", ">= 0.11"
   spec.add_dependency "dry-schema", ">= 1.13"
   spec.add_dependency "falcon", ">= 0.44"
