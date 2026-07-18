@@ -145,6 +145,12 @@ running in development (`FUNAPI_ENV` or `RACK_ENV` set to `development`):
 }
 ```
 
+In development, if the request's `Accept` header prefers `text/html` (a browser),
+the same unhandled-error 500 is rendered as a minimal, readable HTML traceback
+page instead of JSON — no external assets. API clients (which send
+`Accept: application/json`) still get the structured JSON above. Both are
+disabled in production, where every 500 is the generic message.
+
 ## Handling Exceptions in Handlers
 
 Use standard Ruby exception handling:
