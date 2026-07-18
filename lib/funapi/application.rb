@@ -213,9 +213,10 @@ module FunApi
 
       begin
         input = {
-          path: path_params,
+          path: path_params.transform_keys(&:to_sym),
           query: req.params,
-          body: parse_body(req)
+          body: parse_body(req),
+          headers: extract_headers(req.env)
         }
 
         input[:query] = Schema.validate(query_schema, input[:query], location: "query") if query_schema
@@ -398,8 +399,11 @@ module FunApi
     end
 
     def extract_headers(env)
-      env.select { |k, _v| k.start_with?("HTTP_") }
-        .transform_keys { |k| k.sub("HTTP_", "").downcase }
+      headers = env.select { |k, _v| k.start_with?("HTTP_") }
+        .transform_keys { |k| k.delete_prefix("HTTP_").downcase.tr("_", "-") }
+      headers["content-type"] = env["CONTENT_TYPE"] if env["CONTENT_TYPE"]
+      headers["content-length"] = env["CONTENT_LENGTH"] if env["CONTENT_LENGTH"]
+      headers
     end
 
     def normalize_response(response)

@@ -58,7 +58,7 @@ UserOutputSchema = FunApi::Schema.define do
 end
 
 api.get '/users/:id', response_schema: UserOutputSchema do |input, req, task|
-  user = find_user(input[:path]['id'])
+  user = find_user(input[:path][:id])
   # password and other fields are filtered out
   [user, 200]
 end

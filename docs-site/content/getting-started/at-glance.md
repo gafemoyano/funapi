@@ -69,8 +69,8 @@ app = FunApi::App.new do |api|
   # Async operations
   api.get '/dashboard/:id' do |input, req, task|
     # Concurrent fetches
-    user = task.async { fetch_user(input[:path]['id']) }
-    posts = task.async { fetch_posts(input[:path]['id']) }
+    user = task.async { fetch_user(input[:path][:id]) }
+    posts = task.async { fetch_posts(input[:path][:id]) }
     
     [{ user: user.wait, posts: posts.wait }, 200]
   end

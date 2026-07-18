@@ -138,7 +138,7 @@ end
 
 # Empty response for HTMX delete
 api.delete '/items/:id' do |input, req, task|
-  delete_item(input[:path]['id'])
+  delete_item(input[:path][:id])
   FunApi::TemplateResponse.new('')
 end
 ```

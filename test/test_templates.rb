@@ -216,7 +216,7 @@ class TestTemplates < Minitest::Test
     app = FunApi::App.new do |api|
       api.get "/users/:id" do |input, _req, _task|
         templates.response("user.html.erb",
-          user: {id: input[:path]["id"], name: "Test User"})
+          user: {id: input[:path][:id], name: "Test User"})
       end
     end
 

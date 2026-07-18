@@ -26,7 +26,7 @@ UserOutputSchema = FunApi::Schema.define do
 end
 
 api.get '/users/:id', response_schema: UserOutputSchema do |input, req, task|
-  user = find_user(input[:path]['id'])
+  user = find_user(input[:path][:id])
   # Even if user has :password, :api_key, etc., they're filtered out
   [user, 200]
 end
@@ -111,7 +111,7 @@ UserWithAddressSchema = FunApi::Schema.define do
 end
 
 api.get '/users/:id', response_schema: UserWithAddressSchema do |input, req, task|
-  user = find_user_with_address(input[:path]['id'])
+  user = find_user_with_address(input[:path][:id])
   [user, 200]
 end
 ```

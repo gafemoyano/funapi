@@ -40,9 +40,10 @@ All request data is normalized into a single `input` hash:
 
 ```ruby
 api.post '/users/:id' do |input, req, task|
-  input[:path]   # => { 'id' => '123' }
-  input[:query]  # => { limit: 10, offset: 0 }
-  input[:body]   # => { name: 'Alice', ... }
+  input[:path]     # => { id: '123' }
+  input[:query]    # => { limit: 10, offset: 0 }
+  input[:body]     # => { name: 'Alice', ... }
+  input[:headers]  # => { 'content-type' => 'application/json' }
 end
 ```
 

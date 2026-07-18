@@ -12,7 +12,7 @@ Raise `HTTPException` to return an error response:
 
 ```ruby
 api.get '/users/:id' do |input, req, task|
-  user = find_user(input[:path]['id'])
+  user = find_user(input[:path][:id])
   
   unless user
     raise FunApi::HTTPException.new(
@@ -194,8 +194,8 @@ end
 
 # Usage
 api.get '/users/:id' do |input, req, task|
-  user = find_user(input[:path]['id'])
-  raise NotFoundError.new('User', input[:path]['id']) unless user
+  user = find_user(input[:path][:id])
+  raise NotFoundError.new('User', input[:path][:id]) unless user
   [{ user: user }, 200]
 end
 ```

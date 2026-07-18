@@ -38,21 +38,24 @@ Capture dynamic segments with `:param` syntax:
 
 ```ruby
 api.get '/users/:id' do |input, req, task|
-  user_id = input[:path]['id']  # Always a string
+  user_id = input[:path][:id]  # Symbol keys; string value by default
   [{ id: user_id }, 200]
 end
 
 api.get '/posts/:post_id/comments/:comment_id' do |input, req, task|
-  post_id = input[:path]['post_id']
-  comment_id = input[:path]['comment_id']
+  post_id = input[:path][:post_id]
+  comment_id = input[:path][:comment_id]
   [{ post_id: post_id, comment_id: comment_id }, 200]
 end
 ```
 
-> **Note**: Path parameters are always strings. Convert them manually if needed:
+> **Note**: Path parameter keys are symbols. Values are strings by default, so
+> convert them manually if needed:
 > ```ruby
-> id = input[:path]['id'].to_i
+> id = input[:path][:id].to_i
 > ```
+> Or declare a `path:` schema to coerce them automatically (see
+> [Validation](/essential/validation)).
 
 ## Query Parameters
 
