@@ -258,8 +258,11 @@ module FunApi
           ]
         end
 
-        schedule_post_response(current_task, background_tasks, cleanup_objects)
-        deferred = true
+        unless background_tasks.empty? && cleanup_objects.empty?
+          schedule_post_response(current_task, background_tasks, cleanup_objects)
+          deferred = true
+        end
+
         response
       rescue => e
         handle_exception(e, req)
