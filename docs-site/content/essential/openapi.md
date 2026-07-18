@@ -82,6 +82,34 @@ api.get '/users/:id', response_schema: UserOutputSchema do |input, req, task|
 end
 ```
 
+### Tags
+
+Tags group related operations in Swagger UI. Pass `tags:` on a route, or — more
+commonly — on a [router](/essential/routing) so every endpoint it contributes is
+grouped together:
+
+```ruby
+UsersRouter = FunApi::Router.new(prefix: '/users', tags: ['users']) do |r|
+  r.get '/' do |input, req, task|
+    # Documented under the "users" tag
+    [[], 200]
+  end
+end
+
+api.include_router(UsersRouter)
+```
+
+Router tags and inclusion-site tags accumulate, and a route can add its own:
+
+```ruby
+r.get '/audit', tags: ['admin'] do |input, req, task|
+  # Tagged with both the router's tags and "admin"
+end
+```
+
+Each operation's `tags` array is emitted in the spec, and Swagger UI renders one
+collapsible section per tag.
+
 ## Swagger UI
 
 The `/docs` endpoint serves an interactive Swagger UI where you can:

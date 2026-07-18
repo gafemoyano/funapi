@@ -124,3 +124,83 @@ api.get '/' do |input, req, task|
   [{ status: 'ok' }, 200]
 end
 ```
+
+## Router Composition
+
+As an app grows you'll want to split routes across files. `FunApi::Router` is a
+standalone, composable unit — FunApi's answer to FastAPI's `APIRouter`. Define a
+router in its own file, then include it into the app (or into another router).
+
+```ruby
+# routers/users.rb
+UsersRouter = FunApi::Router.new(prefix: '/users', tags: ['users']) do |r|
+  r.get '/' do |input, req, task|
+    [{ users: [] }, 200]
+  end
+
+  r.get '/:id', path: IdSchema do |input, req, task|
+    [{ id: input[:path][:id] }, 200]
+  end
+end
+```
+
+```ruby
+# app.rb
+require_relative 'routers/users'
+
+app = FunApi::App.new do |api|
+  api.include_router(UsersRouter)
+end
+```
+
+A router accepts three composition options:
+
+- `prefix:` — prepended to every route path. Prefixes compose when routers
+  include routers.
+- `tags:` — OpenAPI operation tags so `/docs` groups the endpoints.
+- `depends:` — dependencies shared by every route in the router.
+
+### Shared dependencies
+
+Dependencies declared on the router are injected into every route. A per-route
+`depends:` wins on key conflict:
+
+```ruby
+UsersRouter = FunApi::Router.new(prefix: '/users', depends: { db: :db }) do |r|
+  # `db` is injected here
+  r.get '/' do |input, req, task, db:|
+    [db.all_users, 200]
+  end
+
+  # route-level `store` overrides any shared `store`
+  r.get '/audit', depends: { store: :audit_store } do |input, req, task, db:, store:|
+    [store.recent, 200]
+  end
+end
+
+app = FunApi::App.new do |api|
+  api.register(:db) { Database.connect }
+  api.include_router(UsersRouter)
+end
+```
+
+### Nesting routers
+
+Routers can include other routers. Prefixes, tags, and shared dependencies
+compose from the outside in:
+
+```ruby
+ApiV1 = FunApi::Router.new(prefix: '/api/v1') do |r|
+  r.include_router(UsersRouter)   # -> /api/v1/users/...
+  r.include_router(PostsRouter)   # -> /api/v1/posts/...
+end
+
+app = FunApi::App.new { |api| api.include_router(ApiV1) }
+```
+
+`include_router` also accepts `prefix:`, `depends:`, and `tags:` at the
+inclusion site, applied on top of whatever the router already declares:
+
+```ruby
+api.include_router(UsersRouter, prefix: '/admin', tags: ['admin'])
+```
