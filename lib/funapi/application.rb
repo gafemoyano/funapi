@@ -28,6 +28,7 @@ module FunApi
       @startup_hooks = []
       @shutdown_hooks = []
       @exception_handlers = {}
+      @dependency_overrides = {}
       @openapi_config = {
         title: title,
         version: version,
@@ -81,6 +82,16 @@ module FunApi
 
     def resolve(key)
       @container.resolve(key)
+    end
+
+    def override_dependency(key, replacement)
+      @dependency_overrides[key.to_sym] = replacement
+      self
+    end
+
+    def reset_overrides!
+      @dependency_overrides.clear
+      self
     end
 
     def get(route_path, path: nil, query: nil, response_schema: nil, depends: nil, tags: nil, &blk)
@@ -342,7 +353,7 @@ module FunApi
 
     def schedule_post_response(task, background_tasks, cleanup_objects)
       task.async do |post_task|
-        post_task.sleep(0)
+        sleep(0)
         background_tasks.execute
       ensure
         run_cleanup(cleanup_objects)
@@ -371,7 +382,7 @@ module FunApi
 
       return error.to_response if error.is_a?(HTTPException)
 
-      internal_server_error_response(error)
+      internal_server_error_response(error, req)
     end
 
     def find_exception_handler(error_class)
@@ -382,16 +393,28 @@ module FunApi
       nil
     end
 
-    def internal_server_error_response(error)
-      detail = if development_env?
-        {
-          error: error.class.name,
-          message: error.message,
-          backtrace: error.backtrace&.first(10)
-        }
-      else
-        "Internal Server Error"
+    def internal_server_error_response(error, req = nil)
+      unless development_env?
+        return [
+          500,
+          {"content-type" => "application/json"},
+          [JSON.dump(detail: "Internal Server Error")]
+        ]
       end
+
+      if req && prefers_html?(req)
+        return [
+          500,
+          {"content-type" => "text/html; charset=utf-8"},
+          [dev_error_html(error)]
+        ]
+      end
+
+      detail = {
+        error: error.class.name,
+        message: error.message,
+        backtrace: error.backtrace&.first(10)
+      }
 
       [
         500,
@@ -403,6 +426,56 @@ module FunApi
     def development_env?
       env = ENV["FUNAPI_ENV"] || ENV["RACK_ENV"]
       env == "development"
+    end
+
+    def prefers_html?(req)
+      accept = req.get_header("HTTP_ACCEPT").to_s
+      return false if accept.empty?
+
+      html_index = accept.index("text/html")
+      json_index = accept.index("application/json")
+
+      return false unless html_index
+
+      json_index.nil? || html_index < json_index
+    end
+
+    def dev_error_html(error)
+      backtrace = (error.backtrace || []).map { |line| escape_html(line) }.join("\n")
+
+      <<~HTML
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>#{escape_html(error.class.name)}: #{escape_html(error.message)}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; background: #1e1e2e; color: #cdd6f4; }
+            header { background: #f38ba8; color: #11111b; padding: 1.5rem 2rem; }
+            header h1 { margin: 0 0 0.25rem; font-size: 1.25rem; }
+            header p { margin: 0; font-family: monospace; font-size: 1rem; }
+            main { padding: 1.5rem 2rem; }
+            h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: #a6adc8; }
+            pre { background: #181825; border: 1px solid #313244; border-radius: 6px; padding: 1rem; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; }
+          </style>
+        </head>
+        <body>
+          <header>
+            <h1>#{escape_html(error.class.name)}</h1>
+            <p>#{escape_html(error.message)}</p>
+          </header>
+          <main>
+            <h2>Backtrace</h2>
+            <pre>#{backtrace}</pre>
+          </main>
+        </body>
+        </html>
+      HTML
+    end
+
+    def escape_html(text)
+      Rack::Utils.escape_html(text.to_s)
     end
 
     def build_middleware_chain
@@ -589,23 +662,29 @@ module FunApi
         container: @container
       }
 
-      resolved = dependencies.transform_values do |dep_info|
-        case dep_info[:type]
-        when :container
-          cache_key = "container:#{dep_info[:key]}"
-          if cache.key?(cache_key)
-            cache[cache_key][:resource]
-          else
-            dependency_wrapper = @container.resolve(dep_info[:key])
-            resource = dependency_wrapper.call
-            cache[cache_key] = {resource: resource, wrapper: dependency_wrapper}
-            cleanup_objects << dependency_wrapper
-            resource
+      resolved = dependencies.each_with_object({}) do |(dep_name, dep_info), acc|
+        override = dependency_override(dep_name, dep_info)
+
+        acc[dep_name] = if override
+          resolve_override(override.first)
+        else
+          case dep_info[:type]
+          when :container
+            cache_key = "container:#{dep_info[:key]}"
+            if cache.key?(cache_key)
+              cache[cache_key][:resource]
+            else
+              dependency_wrapper = @container.resolve(dep_info[:key])
+              resource = dependency_wrapper.call
+              cache[cache_key] = {resource: resource, wrapper: dependency_wrapper}
+              cleanup_objects << dependency_wrapper
+              resource
+            end
+          when :depends
+            result, cleanup = dep_info[:callable].call(context, cache)
+            cleanup_objects << ManagedDependency.new(result, cleanup) if cleanup
+            result
           end
-        when :depends
-          result, cleanup = dep_info[:callable].call(context, cache)
-          cleanup_objects << ManagedDependency.new(result, cleanup) if cleanup
-          result
         end
       end
 
@@ -617,6 +696,23 @@ module FunApi
         status_code: 500,
         detail: "Dependency resolution failed: #{e.message}"
       )
+    end
+
+    def dependency_override(dep_name, dep_info)
+      return [@dependency_overrides[dep_name]] if @dependency_overrides.key?(dep_name)
+
+      key = dep_info[:key]
+      return [@dependency_overrides[key]] if key && @dependency_overrides.key?(key)
+
+      nil
+    end
+
+    def resolve_override(replacement)
+      if replacement.is_a?(Proc) || replacement.is_a?(Method)
+        replacement.call
+      else
+        replacement
+      end
     end
 
     def register_openapi_routes
