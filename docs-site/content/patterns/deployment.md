@@ -195,7 +195,7 @@ end
 ### Health Check
 
 ```ruby
-api.get '/health' do |input, req, task|
+api.get '/health' do |input, req|
   [{ status: 'ok', time: Time.now.iso8601 }, 200]
 end
 ```

@@ -36,7 +36,7 @@ module FunApi
 
       parent.async do
         loop do
-          parent.sleep(interval)
+          ::Kernel.sleep(interval)
           writer.comment("heartbeat")
         end
       end

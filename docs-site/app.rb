@@ -81,6 +81,7 @@ class DocsRenderer
         title: "Patterns",
         items: [
           {path: "patterns/async-operations", title: "Async Operations"},
+          {path: "patterns/streaming", title: "Streaming, SSE & WebSockets"},
           {path: "patterns/best-practices", title: "Best Practices"},
           {path: "patterns/incremental-adoption", title: "Incremental Adoption"},
           {path: "patterns/dependencies", title: "Dependencies"},

@@ -150,7 +150,7 @@ end
 
 ## Async-First Design (2024-09)
 
-> **⚠️ Superseded (2026-07):** the `task` parameter will be removed from the handler signature in Phase 4 (issue #8) in favor of structured-concurrency helpers. Old signature keeps working during a deprecation window.
+> **⚠️ Superseded — implemented (2026-07, Phase 4, [#8](https://github.com/gafemoyano/funapi/issues/8)):** the `task` parameter is removed from the documented handler contract. Handlers are now `|input, req|`; concurrency uses the module functions `FunApi.async { }` and `FunApi.sleep(n)`, which resolve the current task via `Fiber[:async_task]` / `Async::Task.current` so handler code never touches an event-loop handle. The old three-argument form still works during the deprecation window (blocks ignore the extra positional arg). All examples and docs migrated to the two-arg form.
 
 ### Decision: Async::Task as Third Handler Parameter
 
@@ -395,6 +395,16 @@ end
 
 ---
 
+## Streaming via Callable Rack Bodies (2026-07)
+
+### Decision: Stream with Rack 3 callable bodies (`#call(stream)`), not `#each`
+
+**Context**: Phase 4 (#8) needs true incremental streaming under Falcon plus SSE and WebSockets.
+
+**Decision**: `FunApi::StreamingResponse` returns a body object that responds to `#call(stream)` and deliberately **not** to `#each`. `protocol-rack` prioritizes `#each` (enumerable, pull-based) over `#call`; a body that only answers `#call` is wrapped by `protocol-http`'s `Streamable` and driven fiber-by-fiber over the socket, which is what actually streams and lets the block spawn concurrent work (`FunApi.async`) and heartbeats. Rack's `MockResponse` invokes the same `#call` against a `StringIO`, so the body is testable eagerly without a server. Client disconnects (`Errno::EPIPE`/`ECONNRESET`/`IOError` and Falcon's writable-closed error) are rescued so the request task never crashes. SSE builds on this; WebSockets use `async-websocket`'s Rack adapter and return `426` for non-upgrade requests. (Only new runtime dep: `async-websocket`.)
+
+---
+
 ## Knowledge Base on GitHub (2026-07)
 
 ### Decision: Plans live in GitHub issues; this file records decisions only
@@ -425,6 +435,7 @@ end
 
 ## Change Log
 
+- 2026-07-18: Phase 4 — streaming via callable Rack bodies, SSE, WebSockets, FunApi.async/FunApi.sleep (task param removed from contract, superseded-implemented), FunApi::Sequel blessed path
 - 2026-07-18: Vision/positioning, FunApi::Model, Sequel bet, GitHub knowledge base; superseded task-param and no-database decisions
 - 2024-10-27: Added dependency injection decisions
 - 2024-10-26: Testing, middleware, documentation strategies

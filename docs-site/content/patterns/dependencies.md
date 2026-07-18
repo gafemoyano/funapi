@@ -23,12 +23,12 @@ end
 Request dependencies with the `depends:` parameter:
 
 ```ruby
-api.get '/users', depends: [:db] do |input, req, task, db:|
+api.get '/users', depends: [:db] do |input, req, db:|
   users = db.query("SELECT * FROM users")
   [{ users: users }, 200]
 end
 
-api.post '/contact', depends: [:mailer, :logger] do |input, req, task, mailer:, logger:|
+api.post '/contact', depends: [:mailer, :logger] do |input, req, mailer:, logger:|
   logger.info("Sending contact email")
   mailer.send(input[:body])
   [{ sent: true }, 200]
@@ -109,7 +109,7 @@ get_user = ->(db:) { db.find_user(current_token) }
 api.get '/profile', depends: { 
   db: get_db, 
   user: FunApi.Depends(get_user, db: :db) 
-} do |input, req, task, db:, user:|
+} do |input, req, db:, user:|
   [{ user: user }, 200]
 end
 ```
@@ -145,13 +145,13 @@ app = FunApi::App.new(title: "My API") do |api|
     conn.close
   end
 
-  api.get '/users', depends: [:db, :logger] do |input, req, task, db:, logger:|
+  api.get '/users', depends: [:db, :logger] do |input, req, db:, logger:|
     logger.info("Fetching users")
     result = db.exec("SELECT * FROM users")
     [{ users: result.to_a }, 200]
   end
 
-  api.post '/users', depends: [:transaction] do |input, req, task, transaction:|
+  api.post '/users', depends: [:transaction] do |input, req, transaction:|
     transaction.exec("INSERT INTO users (name) VALUES ($1)", [input[:body][:name]])
     [{ created: true }, 201]
   end

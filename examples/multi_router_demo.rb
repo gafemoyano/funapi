@@ -25,11 +25,11 @@ end
 # routers/users.rb
 # ---------------------------------------------------------------------------
 UsersRouter = FunApi::Router.new(prefix: "/users", tags: ["users"], depends: {db: :db}) do |r|
-  r.get("/", response_schema: [UserSchema]) do |_input, _req, _task, db:|
+  r.get("/", response_schema: [UserSchema]) do |_input, _req, db:|
     [db[:users], 200]
   end
 
-  r.get("/:id", path: IdSchema, response_schema: UserSchema) do |input, _req, _task, db:|
+  r.get("/:id", path: IdSchema, response_schema: UserSchema) do |input, _req, db:|
     user = db[:users].find { |u| u[:id] == input[:path][:id].to_i }
     raise FunApi::HTTPException.new(status_code: 404, detail: "User not found") unless user
 
@@ -41,11 +41,11 @@ end
 # routers/posts.rb
 # ---------------------------------------------------------------------------
 PostsRouter = FunApi::Router.new(prefix: "/posts", tags: ["posts"], depends: {db: :db}) do |r|
-  r.get("/", response_schema: [PostSchema]) do |_input, _req, _task, db:|
+  r.get("/", response_schema: [PostSchema]) do |_input, _req, db:|
     [db[:posts], 200]
   end
 
-  r.get("/:id", path: IdSchema, response_schema: PostSchema) do |input, _req, _task, db:|
+  r.get("/:id", path: IdSchema, response_schema: PostSchema) do |input, _req, db:|
     post = db[:posts].find { |p| p[:id] == input[:path][:id].to_i }
     raise FunApi::HTTPException.new(status_code: 404, detail: "Post not found") unless post
 

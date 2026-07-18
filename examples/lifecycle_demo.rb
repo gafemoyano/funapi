@@ -37,14 +37,14 @@ app = FunApi::App.new(
     puts "Cache cleared!"
   end
 
-  api.get "/status" do |_input, _req, _task|
+  api.get "/status" do |_input, _req|
     [{
       db_connected: DB[:connected],
       cache_warmed: CACHE[:warmed]
     }, 200]
   end
 
-  api.get "/users" do |_input, _req, _task|
+  api.get "/users" do |_input, _req|
     [DB[:users], 200]
   end
 end

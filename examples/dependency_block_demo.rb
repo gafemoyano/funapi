@@ -52,7 +52,7 @@ app = FunApi::App.new(
     conn&.close
   end
 
-  api.get "/" do |_input, _req, _task|
+  api.get "/" do |_input, _req|
     [{
       message: "Block-Based Dependency Demo",
       info: "Dependencies use Ruby blocks with ensure for cleanup",
@@ -67,7 +67,7 @@ app = FunApi::App.new(
   end
 
   api.get "/users",
-    depends: [:db] do |_input, _req, _task, db:|
+    depends: [:db] do |_input, _req, db:|
     puts "\n🔹 Handler executing..."
     users = db.query("SELECT * FROM users")
 
@@ -76,7 +76,7 @@ app = FunApi::App.new(
   end
 
   api.get "/error",
-    depends: [:db] do |_input, _req, _task, db:|
+    depends: [:db] do |_input, _req, db:|
     puts "\n🔹 Handler executing..."
     db.query("SELECT * FROM users")
 
@@ -88,7 +88,7 @@ app = FunApi::App.new(
     depends: {
       db1: :db,
       db2: :db
-    } do |_input, _req, _task, db1:, db2:|
+    } do |_input, _req, db1:, db2:|
     puts "\n🔹 Handler executing with multiple deps..."
     puts "  db1 object_id: #{db1.object_id}"
     puts "  db2 object_id: #{db2.object_id}"
@@ -105,7 +105,7 @@ app = FunApi::App.new(
     }, 200]
   end
 
-  api.get "/stats" do |_input, _req, _task|
+  api.get "/stats" do |_input, _req|
     open_count = $all_connections.count(&:open?)
     closed_count = $all_connections.count { |c| !c.open? }
 

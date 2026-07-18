@@ -16,11 +16,11 @@ UserSchema = FunApi::Schema.define do
 end
 
 app = FunApi::App.new(title: "My API", version: "1.0.0") do |api|
-  api.get '/hello' do |input, req, task|
+  api.get '/hello' do |input, req|
     [{ message: 'Hello, World!' }, 200]
   end
 
-  api.post '/users', body: UserSchema do |input, req, task|
+  api.post '/users', body: UserSchema do |input, req|
     [{ created: input[:body] }, 201]
   end
 end
@@ -66,7 +66,7 @@ require 'funapi'
 require 'funapi/server/falcon'
 
 app = FunApi::App.new do |api|
-  api.get '/hello/:name' do |input, req, task|
+  api.get '/hello/:name' do |input, req|
     name = input[:path][:name]
     [{ message: "Hello, #{name}!" }, 200]
   end
