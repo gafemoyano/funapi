@@ -4,183 +4,158 @@ title: Validation
 
 # Validation
 
-FunApi uses [dry-schema](https://dry-rb.org/gems/dry-schema/) for request and response validation.
+FunApi validates requests and responses with **models**. A `FunApi::Model`
+subclass *is* a schema: one declaration gives you input validation and coercion,
+output serialization, and an OpenAPI schema. Validated data stays a plain
+symbolized `Hash` — FunApi never wraps your data in framework objects.
 
-## Defining Schemas
-
-Create schemas with `FunApi::Schema.define`:
+## Defining a Model
 
 ```ruby
-UserSchema = FunApi::Schema.define do
-  required(:name).filled(:string)
-  required(:email).filled(:string)
-  optional(:age).filled(:integer)
-  optional(:role).filled(:string)
+class User < FunApi::Model
+  field :id,      :integer
+  field :name,    :string,  description: "Display name"
+  field :email,   :string,  format: "email"
+  field :role,    :string,  enum: %w[admin member], default: "member"
+  field :age,     :integer, optional: true, nullable: true, min: 0, max: 120
+  field :address, Address,  optional: true          # nested model
+  field :tags,    [:string], default: []            # array of primitives
+  field :posts,   [Post],    default: []            # array of models
 end
 ```
 
-> **Technical Detail**: `FunApi::Schema.define` is a thin wrapper around `Dry::Schema.Params`. You have access to the full dry-schema DSL.
+### Field types
 
-## Applying Schemas
+- Primitives: `:string`, `:integer`, `:float`, `:decimal`, `:bool`, `:date`, `:time`, `:hash`
+- A `FunApi::Model` subclass for a nested object
+- A one-element array of either — `[:string]`, `[Post]`
 
-### Body Validation
+### Field options
+
+| Option | Meaning |
+|---|---|
+| `optional: true` | field may be absent |
+| `default:` | value used when the key is missing (also makes the field optional) |
+| `nullable: true` | explicit `nil` is allowed |
+| `description:` | documentation string, surfaced in OpenAPI |
+| `format:` | OpenAPI `format` hint (e.g. `"email"`, `"uuid"`) |
+| `enum:` | allowed values |
+| `min:` / `max:` | value bounds for numbers, length bounds for strings/arrays |
+| `pattern:` | a `Regexp` (or string) the value must match |
+
+A field is **required** unless you pass `optional: true` or a `default:`.
+Unknown options and unknown types raise immediately at class-definition time.
+
+## Applying a Model to a Route
+
+The `body:`, `query:`, `path:`, and `response_schema:` keywords all accept a
+model class (or `[Model]` for a collection):
 
 ```ruby
-api.post '/users', body: UserSchema do |input, req, task|
-  user = input[:body]  # Validated and coerced
-  [{ created: user }, 201]
+api.post "/users", body: UserCreate, response_schema: User do |input, req|
+  input[:body]              # plain validated Hash, defaults applied
+  [db_user, 201]            # object serialized + filtered by User
 end
 ```
 
-### Query Validation
+- **Request side** runs `Model.validate` — coerces types, applies defaults, and
+  raises a `422` with FastAPI-style errors on failure.
+- **Response side** runs `Model.dump` then validates the result. `dump` reads a
+  `Hash` or **any object responding to the field names** (a `Struct`, a
+  `Sequel::Model`, …), keeps only declared fields, and recurses into nested
+  models and arrays. Response mismatches stay `500`.
+
+### Path and query
 
 ```ruby
-SearchSchema = FunApi::Schema.define do
-  required(:q).filled(:string)
-  optional(:limit).filled(:integer)
-  optional(:offset).filled(:integer)
+class UserId < FunApi::Model
+  field :id, :integer
 end
 
-api.get '/search', query: SearchSchema do |input, req, task|
-  [{ results: search(input[:query]) }, 200]
+api.get "/users/:id", path: UserId do |input, req|
+  input[:path][:id]         # => 42 (Integer, coerced from "42")
+  [{id: input[:path][:id]}, 200]
 end
 ```
 
-### Path Validation
+Declared types flow into the generated OpenAPI parameters (e.g.
+`type: integer`).
 
-Path parameters are strings by default. Pass a `path:` schema to validate and
-coerce them, symmetric with `query:` and `body:`:
+### Collections
 
 ```ruby
-UserIdSchema = FunApi::Schema.define do
-  required(:id).filled(:integer)
-end
-
-api.get '/users/:id', path: UserIdSchema do |input, req, task|
-  input[:path][:id]  # => 42 (Integer, coerced from "42")
-  [{ id: input[:path][:id] }, 200]
+api.post "/users/batch", body: [UserCreate] do |input, req|
+  input[:body]              # Array of validated Hashes
+  [{created: input[:body].length}, 201]
 end
 ```
 
-A request like `GET /users/not-a-number` returns a `422` with a
-`loc: ["id"]` error. The declared types also flow into the generated OpenAPI
-path parameters (e.g. `type: integer` instead of the default `type: string`).
+## Inheritance
 
-### Response Validation
-
-Filter and validate response data:
+Subclasses compose their parent's fields:
 
 ```ruby
-UserOutputSchema = FunApi::Schema.define do
-  required(:id).filled(:integer)
-  required(:name).filled(:string)
-  required(:email).filled(:string)
+class Animal < FunApi::Model
+  field :name, :string
+  field :legs, :integer, default: 4
 end
 
-api.get '/users/:id', response_schema: UserOutputSchema do |input, req, task|
-  user = find_user(input[:path][:id])
-  # password and other fields are filtered out
-  [user, 200]
+class Dog < Animal
+  field :breed, :string       # Dog has name, legs, breed
 end
 ```
 
-## Schema DSL
+## Introspection
 
-### Required vs Optional
-
-```ruby
-FunApi::Schema.define do
-  required(:name).filled(:string)   # Must be present and non-empty
-  optional(:nickname).filled(:string)  # Can be absent, but if present must be valid
-end
-```
-
-### Types
+A model is a value you can inspect:
 
 ```ruby
-FunApi::Schema.define do
-  required(:name).filled(:string)
-  required(:age).filled(:integer)
-  required(:price).filled(:float)
-  required(:active).filled(:bool)
-  required(:tags).filled(:array)
-  required(:metadata).filled(:hash)
-end
-```
-
-### Nested Objects
-
-```ruby
-AddressSchema = FunApi::Schema.define do
-  required(:street).filled(:string)
-  required(:city).filled(:string)
-  required(:zip).filled(:string)
-end
-
-UserSchema = FunApi::Schema.define do
-  required(:name).filled(:string)
-  required(:address).hash(AddressSchema)
-end
-```
-
-### Arrays of Objects
-
-```ruby
-ItemSchema = FunApi::Schema.define do
-  required(:name).filled(:string)
-  required(:quantity).filled(:integer)
-end
-
-OrderSchema = FunApi::Schema.define do
-  required(:items).array(:hash) do
-    required(:name).filled(:string)
-    required(:quantity).filled(:integer)
-  end
-end
-```
-
-Or validate an array of items:
-
-```ruby
-api.post '/users/batch', body: [UserSchema] do |input, req, task|
-  users = input[:body]  # Array of validated users
-  [{ created: users.length }, 201]
-end
+User.fields        # frozen metadata Hash, keyed by field name
+User.validate(h)   # => coerced symbolized Hash
+User.dump(record)  # => filtered plain Hash
+User.json_schema   # => JSON Schema Hash
 ```
 
 ## Validation Errors
 
-When validation fails, FunApi returns a FastAPI-style error response:
+When request validation fails, FunApi returns a FastAPI-style `422`:
 
 ```json
 {
   "detail": [
     {
-      "loc": ["body", "email"],
+      "loc": ["email"],
       "msg": "is missing",
       "type": "value_error"
     },
     {
-      "loc": ["body", "age"],
-      "msg": "must be an integer",
+      "loc": ["address", "street"],
+      "msg": "is missing",
       "type": "value_error"
     }
   ]
 }
 ```
 
-Status code: `422 Unprocessable Entity`
+## Legacy: `FunApi::Schema.define`
 
-## Custom Validation
-
-For complex validation, use dry-schema's full DSL:
+> `FunApi::Schema.define` predates `FunApi::Model` and remains supported
+> everywhere a model is accepted. It is a thin wrapper around
+> [`Dry::Schema.Params`](https://dry-rb.org/gems/dry-schema/) that validates but
+> does **not** serialize objects. Prefer `FunApi::Model` for new code.
 
 ```ruby
 UserSchema = FunApi::Schema.define do
-  required(:email).filled(:string, format?: /@/)
-  required(:age).filled(:integer, gt?: 0, lt?: 150)
-  required(:password).filled(:string, min_size?: 8)
+  required(:name).filled(:string)
+  optional(:age).filled(:integer)
+end
+
+api.post "/users", body: UserSchema do |input, req|
+  [{created: input[:body]}, 201]
 end
 ```
 
-See the [dry-schema documentation](https://dry-rb.org/gems/dry-schema/) for the complete DSL reference.
+Because `define` returns a raw dry-schema, you have the full dry-schema DSL
+(nested `hash(...)`, `array(:hash)`, predicates like `min_size?`/`gteq?`, …).
+See the [dry-schema documentation](https://dry-rb.org/gems/dry-schema/) for the
+complete reference.

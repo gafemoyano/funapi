@@ -143,7 +143,11 @@ module FunApi
         schema_obj = unwrap_array_schema(schema)
         is_array = schema.is_a?(Array)
 
-        schema_name = SchemaConverter.extract_schema_name(schema_obj)
+        schema_name = if SchemaConverter.model?(schema_obj)
+          schema_obj.name.split("::").last
+        else
+          SchemaConverter.extract_schema_name(schema_obj)
+        end
 
         unless schema_name
           @schema_counter += 1
