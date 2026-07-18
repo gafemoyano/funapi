@@ -326,10 +326,15 @@ module FunApi
 
       case content_type
       when %r{application/json}
+        return {} if body.nil? || body.strip.empty?
+
         begin
           JSON.parse(body, symbolize_names: true)
-        rescue
-          {}
+        rescue JSON::ParserError => e
+          raise HTTPException.new(
+            status_code: 400,
+            detail: [{loc: ["body"], msg: "Invalid JSON: #{e.message}", type: "json_invalid"}]
+          )
         end
       when %r{application/x-www-form-urlencoded}
         request.POST

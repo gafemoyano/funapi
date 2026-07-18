@@ -210,7 +210,11 @@ class TestValidation < Minitest::Test
       :input => "not valid json"
     )
 
-    assert_equal 422, res.status
+    assert_equal 400, res.status
+    data = parse(res)
+    assert data[:detail].is_a?(Array)
+    assert_equal "json_invalid", data[:detail].first[:type]
+    assert_equal ["body"], data[:detail].first[:loc]
   end
 
   def test_array_body_validation
