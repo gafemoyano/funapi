@@ -11,6 +11,7 @@ no extra runtime dependencies.
 funapi new NAME              # scaffold a new application
 funapi dev [--port] [--bind] # run under Falcon with code reloading
 funapi routes [--json]       # print the route table
+funapi check [--json]        # verify boot, schemas, OpenAPI, and spec drift
 funapi version
 ```
 
@@ -81,3 +82,47 @@ POST  /widgets            body=CreateWidget response=Widget
 ```bash
 funapi routes --json
 ```
+
+## funapi check
+
+One command to verify an app is healthy — designed as the verification loop a
+coding agent can branch on. It boots the app, then runs four checks: routes
+load, every model's JSON Schema generates, the OpenAPI spec generates and is
+valid JSON, and the spec has not drifted from a committed snapshot.
+
+```bash
+$ funapi check
+✓ routes       3 route(s) loaded
+✓ schemas      all model JSON schemas generate
+✓ openapi      spec generates and is valid JSON
+✓ spec-drift   no snapshot (run 'funapi check --update-snapshot' to create openapi.snapshot.json)
+
+All checks passed.
+```
+
+Exit codes are machine-friendly: **0** when all checks pass, **1** on any
+failure. `--json` emits a structured result:
+
+```json
+{
+  "status": "ok",
+  "checks": [
+    {"name": "routes", "ok": true, "detail": "3 route(s) loaded"},
+    {"name": "openapi", "ok": true, "detail": "spec generates and is valid JSON"}
+  ]
+}
+```
+
+### Spec-drift detection
+
+Commit a snapshot of your OpenAPI spec and `funapi check` fails whenever the
+generated spec diverges from it — catching accidental API changes in review or
+CI:
+
+```bash
+funapi check --update-snapshot   # writes openapi.snapshot.json
+```
+
+A missing snapshot is a note, not a failure. When present, any difference
+between the generated spec and the snapshot fails the `spec-drift` check with
+exit 1; re-run with `--update-snapshot` once the change is intentional.

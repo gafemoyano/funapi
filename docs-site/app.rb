@@ -35,6 +35,33 @@ class DocsRenderer
     @navigation ||= build_navigation
   end
 
+  def pages
+    navigation.flat_map do |section|
+      section[:items].map { |item| item.merge(section: section[:title]) }
+    end
+  end
+
+  def raw_body(path)
+    file_path = @content_dir.join("#{path}.md")
+    return nil unless file_path.exist?
+
+    _frontmatter, body = parse_frontmatter(file_path.read)
+    body.strip
+  end
+
+  def summary(path)
+    body = raw_body(path)
+    return nil unless body
+
+    body.each_line do |line|
+      stripped = line.strip
+      next if stripped.empty? || stripped.start_with?("#", "```", "---")
+
+      return stripped.gsub(/[*_`\[\]]/, "").gsub(/\((?:[^)]*)\)/, "").strip
+    end
+    nil
+  end
+
   private
 
   def parse_frontmatter(content)
@@ -98,6 +125,7 @@ class DocsRenderer
           {path: "patterns/background-tasks", title: "Background Tasks"},
           {path: "patterns/templates", title: "Templates"},
           {path: "patterns/error-handling", title: "Error Handling"},
+          {path: "patterns/errors-reference", title: "Errors Reference"},
           {path: "patterns/response-schema", title: "Response Schema"},
           {path: "patterns/database", title: "Database"},
           {path: "patterns/testing", title: "Testing"},
@@ -135,8 +163,59 @@ app = FunApi::App.new(
     )
   end
 
+  api.get "/llms.txt" do |_input, req, _task|
+    base = req.base_url
+    lines = []
+    lines << "# FunApi"
+    lines << ""
+    lines << "> FunApi is a minimal, async-first Ruby web framework inspired by FastAPI: " \
+      "schemas are plain values (FunApi::Model), OpenAPI docs are automatic, and streaming, " \
+      "SSE, and WebSockets are first-class."
+    lines << ""
+
+    docs.navigation.each do |section|
+      lines << "## #{section[:title]}"
+      section[:items].each do |item|
+        url = "#{base}/docs/#{item[:path]}"
+        desc = docs.summary(item[:path])
+        lines << (desc ? "- [#{item[:title]}](#{url}): #{desc}" : "- [#{item[:title]}](#{url})")
+      end
+      lines << ""
+    end
+
+    FunApi::TemplateResponse.new(
+      "#{lines.join("\n").strip}\n",
+      headers: {"content-type" => "text/plain; charset=utf-8"}
+    )
+  end
+
+  api.get "/llms-full.txt" do |_input, req, _task|
+    base = req.base_url
+    sections = ["# FunApi — Full Documentation", ""]
+
+    docs.pages.each do |page|
+      body = docs.raw_body(page[:path])
+      next unless body
+
+      url = "#{base}/docs/#{page[:path]}"
+      sections << "# #{page[:title]}"
+      sections << "Source: #{url}"
+      sections << "Section: #{page[:section]}"
+      sections << ""
+      sections << body
+      sections << ""
+      sections << "---"
+      sections << ""
+    end
+
+    FunApi::TemplateResponse.new(
+      "#{sections.join("\n").strip}\n",
+      headers: {"content-type" => "text/plain; charset=utf-8"}
+    )
+  end
+
   api.get "/docs/:section/:page" do |input, _req, _task|
-    path = "#{input[:path]["section"]}/#{input[:path]["page"]}"
+    path = "#{input[:path][:section]}/#{input[:path][:page]}"
     page = docs.render(path)
     templates.response(
       "page.html.erb",
