@@ -84,6 +84,22 @@ module FunApi
       @container.resolve(key)
     end
 
+    def routes
+      @route_set.routes.reject { |route| route.metadata[:internal] }.map do |route|
+        metadata = route.metadata
+        {
+          verb: route.verb,
+          path: metadata[:path_template],
+          tags: metadata[:tags] || [],
+          websocket: metadata[:websocket] || false,
+          path_schema: schema_name(metadata[:path_schema]),
+          query_schema: schema_name(metadata[:query_schema]),
+          body_schema: schema_name(metadata[:body_schema]),
+          response_schema: schema_name(metadata[:response_schema])
+        }
+      end
+    end
+
     def override_dependency(key, replacement)
       @dependency_overrides[key.to_sym] = replacement
       self
@@ -227,6 +243,19 @@ module FunApi
     # end
 
     private
+
+    def schema_name(schema)
+      return nil if schema.nil?
+
+      if schema.is_a?(Array)
+        inner = schema_name(schema.first)
+        inner ? "[#{inner}]" : nil
+      elsif schema.is_a?(Class) && schema < FunApi::Model
+        schema.name || "Model"
+      else
+        "Schema"
+      end
+    end
 
     def block_provider(block)
       return block if block.arity != 0
