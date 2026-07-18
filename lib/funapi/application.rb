@@ -197,6 +197,7 @@ module FunApi
       Fiber[:async_task] = current_task
       cleanup_objects = []
       background_tasks = BackgroundTasks.new(current_task)
+      deferred = false
 
       begin
         input = {
@@ -218,33 +219,46 @@ module FunApi
 
         payload, status = blk.call(input, req, current_task, **resolved_deps)
 
-        if payload.is_a?(TemplateResponse)
-          background_tasks.execute
-          return payload.to_response
+        response = if payload.is_a?(TemplateResponse)
+          payload.to_response
+        else
+          payload = normalize_payload(payload)
+          payload = Schema.validate_response(response_schema, payload) if response_schema
+
+          [
+            status || 200,
+            {"content-type" => "application/json"},
+            [JSON.dump(payload)]
+          ]
         end
 
-        payload = normalize_payload(payload)
-
-        payload = Schema.validate_response(response_schema, payload) if response_schema
-
-        background_tasks.execute
-
-        [
-          status || 200,
-          {"content-type" => "application/json"},
-          [JSON.dump(payload)]
-        ]
+        schedule_post_response(current_task, background_tasks, cleanup_objects)
+        deferred = true
+        response
       rescue ValidationError => e
         e.to_response
       rescue HTTPException => e
         e.to_response
       ensure
-        cleanup_objects.each do |wrapper|
-          wrapper.cleanup
-        rescue => e
-          warn "Dependency cleanup failed: #{e.message}"
-        end
+        run_cleanup(cleanup_objects) unless deferred
         Fiber[:async_task] = nil
+      end
+    end
+
+    def schedule_post_response(task, background_tasks, cleanup_objects)
+      task.async do |post_task|
+        post_task.sleep(0)
+        background_tasks.execute
+      ensure
+        run_cleanup(cleanup_objects)
+      end
+    end
+
+    def run_cleanup(cleanup_objects)
+      cleanup_objects.each do |wrapper|
+        wrapper.cleanup
+      rescue => e
+        warn "Dependency cleanup failed: #{e.message}"
       end
     end
 

@@ -26,6 +26,26 @@ class TestBackgroundTasks < Minitest::Test
     assert_equal 200, res.status
   end
 
+  def test_response_returns_before_background_tasks_run
+    order = []
+
+    app = FunApi::App.new do |api|
+      api.post "/test" do |_input, _req, _task, background:|
+        background.add_task(-> { order << :background })
+        [{ok: true}, 200]
+      end
+    end
+
+    res = nil
+    Async do
+      res = Rack::MockRequest.new(app).post("/test")
+      order << :response_received
+    end.wait
+
+    assert_equal %i[response_received background], order
+    assert_equal 200, res.status
+  end
+
   def test_multiple_background_tasks_execute_in_order
     execution_order = []
 
