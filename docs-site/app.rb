@@ -82,6 +82,7 @@ class DocsRenderer
         items: [
           {path: "patterns/async-operations", title: "Async Operations"},
           {path: "patterns/best-practices", title: "Best Practices"},
+          {path: "patterns/incremental-adoption", title: "Incremental Adoption"},
           {path: "patterns/dependencies", title: "Dependencies"},
           {path: "patterns/background-tasks", title: "Background Tasks"},
           {path: "patterns/templates", title: "Templates"},

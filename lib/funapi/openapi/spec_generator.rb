@@ -52,6 +52,8 @@ module FunApi
         parameters.concat(build_path_parameters(route))
         parameters.concat(build_query_parameters(route))
 
+        tags = route.metadata[:tags]
+        operation[:tags] = tags if tags && !tags.empty?
         operation[:parameters] = parameters unless parameters.empty?
         operation[:requestBody] = build_request_body(route) if route.metadata[:body_schema]
         operation[:responses] = build_responses(route)
