@@ -6,6 +6,7 @@ require "async/http/endpoint"
 require "protocol/rack"
 require "dry-container"
 require_relative "router"
+require_relative "route_set"
 require_relative "exceptions"
 require_relative "schema"
 require_relative "depends"
@@ -19,7 +20,7 @@ module FunApi
     attr_reader :openapi_config, :container, :startup_hooks, :shutdown_hooks
 
     def initialize(title: "FunApi Application", version: "1.0.0", description: "")
-      @router = Router.new
+      @route_set = RouteSet.new
       @middleware_stack = []
       @container = Dry::Container.new
       @startup_hooks = []
@@ -80,24 +81,40 @@ module FunApi
       @container.resolve(key)
     end
 
-    def get(route_path, path: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("GET", route_path, path: path, query: query, response_schema: response_schema, depends: depends, &blk)
+    def get(route_path, path: nil, query: nil, response_schema: nil, depends: nil, tags: nil, &blk)
+      add_route("GET", route_path, path: path, query: query, response_schema: response_schema, depends: depends, tags: tags, &blk)
     end
 
-    def post(route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("POST", route_path, path: path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
+    def post(route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, tags: nil, &blk)
+      add_route("POST", route_path, path: path, body: body, query: query, response_schema: response_schema, depends: depends, tags: tags, &blk)
     end
 
-    def put(route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("PUT", route_path, path: path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
+    def put(route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, tags: nil, &blk)
+      add_route("PUT", route_path, path: path, body: body, query: query, response_schema: response_schema, depends: depends, tags: tags, &blk)
     end
 
-    def patch(route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("PATCH", route_path, path: path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
+    def patch(route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, tags: nil, &blk)
+      add_route("PATCH", route_path, path: path, body: body, query: query, response_schema: response_schema, depends: depends, tags: tags, &blk)
     end
 
-    def delete(route_path, path: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("DELETE", route_path, path: path, query: query, response_schema: response_schema, depends: depends, &blk)
+    def delete(route_path, path: nil, query: nil, response_schema: nil, depends: nil, tags: nil, &blk)
+      add_route("DELETE", route_path, path: path, query: query, response_schema: response_schema, depends: depends, tags: tags, &blk)
+    end
+
+    def include_router(router, prefix: "", depends: {}, tags: [])
+      router.each_route(
+        inherited_prefix: normalize_router_prefix(prefix),
+        inherited_depends: Router.coerce_depends(depends),
+        inherited_tags: Array(tags)
+      ) do |verb:, path:, path_schema:, body_schema:, query_schema:, response_schema:, depends:, tags:, block:|
+        add_route(verb, path, path: path_schema, body: body_schema, query: query_schema, response_schema: response_schema, depends: depends, tags: tags, &block)
+      end
+      self
+    end
+
+    def mount(prefix, rack_app)
+      @route_set.mount(prefix, rack_app)
+      self
     end
 
     def use(middleware, *args, &block)
@@ -200,16 +217,25 @@ module FunApi
       end
     end
 
-    def add_route(verb, route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
+    def normalize_router_prefix(prefix)
+      value = prefix.to_s
+      return "" if value.empty? || value == "/"
+
+      value = "/#{value}" unless value.start_with?("/")
+      value.chomp("/")
+    end
+
+    def add_route(verb, route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, tags: nil, &blk)
       metadata = {
         path_schema: path,
         body_schema: body,
         query_schema: query,
         response_schema: response_schema,
+        tags: Array(tags),
         dependencies: normalize_dependencies(depends)
       }
 
-      @router.add(verb, route_path, metadata: metadata) do |req, path_params|
+      @route_set.add(verb, route_path, metadata: metadata) do |req, path_params|
         handle_async_route(req, path_params, path, body, query, response_schema, metadata[:dependencies], &blk)
       end
     end
@@ -337,7 +363,7 @@ module FunApi
     end
 
     def build_middleware_chain
-      app = @router
+      app = @route_set
 
       @middleware_stack.reverse_each do |middleware, args, block|
         app = if args.length == 1 && args.first.is_a?(Hash) && args.first.keys.all? { |k| k.is_a?(Symbol) }
@@ -551,7 +577,7 @@ module FunApi
     end
 
     def register_openapi_routes
-      @router.add("GET", "/openapi.json", metadata: {internal: true}) do |_req, _path_params|
+      @route_set.add("GET", "/openapi.json", metadata: {internal: true}) do |_req, _path_params|
         spec = generate_openapi_spec
         [
           200,
@@ -560,7 +586,7 @@ module FunApi
         ]
       end
 
-      @router.add("GET", "/docs", metadata: {internal: true}) do |_req, _path_params|
+      @route_set.add("GET", "/docs", metadata: {internal: true}) do |_req, _path_params|
         html = swagger_ui_html
         [
           200,
@@ -571,7 +597,7 @@ module FunApi
     end
 
     def generate_openapi_spec
-      generator = OpenAPI::SpecGenerator.new(@router.routes, info: @openapi_config)
+      generator = OpenAPI::SpecGenerator.new(@route_set.routes, info: @openapi_config)
       generator.generate
     end
 
