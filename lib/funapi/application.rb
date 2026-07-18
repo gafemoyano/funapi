@@ -445,6 +445,8 @@ module FunApi
       end
 
       [resolved, cleanup_objects]
+    rescue HTTPException
+      raise
     rescue => e
       raise HTTPException.new(
         status_code: 500,
