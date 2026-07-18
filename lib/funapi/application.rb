@@ -25,6 +25,7 @@ module FunApi
       @container = Dry::Container.new
       @startup_hooks = []
       @shutdown_hooks = []
+      @exception_handlers = {}
       @openapi_config = {
         title: title,
         version: version,
@@ -60,6 +61,13 @@ module FunApi
       rescue => e
         warn "Shutdown hook failed: #{e.message}"
       end
+    end
+
+    def exception_handler(exception_class, &block)
+      raise ArgumentError, "exception_handler requires a block" unless block_given?
+
+      @exception_handlers[exception_class] = block
+      self
     end
 
     def register(key, &block)
@@ -239,10 +247,8 @@ module FunApi
         schedule_post_response(current_task, background_tasks, cleanup_objects)
         deferred = true
         response
-      rescue ValidationError => e
-        e.to_response
-      rescue HTTPException => e
-        e.to_response
+      rescue => e
+        handle_exception(e, req)
       ensure
         run_cleanup(cleanup_objects) unless deferred
         Fiber[:async_task] = nil
@@ -264,6 +270,54 @@ module FunApi
       rescue => e
         warn "Dependency cleanup failed: #{e.message}"
       end
+    end
+
+    def handle_exception(error, req)
+      handler = find_exception_handler(error.class)
+
+      if handler
+        payload, status = handler.call(error, req)
+        return [
+          status || 500,
+          {"content-type" => "application/json"},
+          [JSON.dump(normalize_payload(payload))]
+        ]
+      end
+
+      return error.to_response if error.is_a?(HTTPException)
+
+      internal_server_error_response(error)
+    end
+
+    def find_exception_handler(error_class)
+      error_class.ancestors.each do |ancestor|
+        handler = @exception_handlers[ancestor]
+        return handler if handler
+      end
+      nil
+    end
+
+    def internal_server_error_response(error)
+      detail = if development_env?
+        {
+          error: error.class.name,
+          message: error.message,
+          backtrace: error.backtrace&.first(10)
+        }
+      else
+        "Internal Server Error"
+      end
+
+      [
+        500,
+        {"content-type" => "application/json"},
+        [JSON.dump(detail: detail)]
+      ]
+    end
+
+    def development_env?
+      env = ENV["FUNAPI_ENV"] || ENV["RACK_ENV"]
+      env == "development"
     end
 
     def build_middleware_chain

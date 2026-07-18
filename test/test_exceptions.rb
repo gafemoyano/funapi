@@ -162,6 +162,83 @@ class TestExceptions < Minitest::Test
     assert_equal %w[name email], data[:detail][:fields]
   end
 
+  def test_registered_exception_handler
+    my_error = Class.new(StandardError)
+
+    app = FunApi::App.new do |api|
+      api.exception_handler(my_error) do |error, _req|
+        [{error: "handled", message: error.message}, 422]
+      end
+
+      api.get "/boom" do |_input, _req, _task|
+        raise my_error, "something broke"
+      end
+    end
+
+    res = async_request(app, :get, "/boom")
+    data = parse(res)
+
+    assert_equal 422, res.status
+    assert_equal "handled", data[:error]
+    assert_equal "something broke", data[:message]
+  end
+
+  def test_registered_exception_handler_matches_subclasses
+    base_error = Class.new(StandardError)
+    child_error = Class.new(base_error)
+
+    app = FunApi::App.new do |api|
+      api.exception_handler(base_error) do |_error, _req|
+        [{handled: true}, 400]
+      end
+
+      api.get "/child" do |_input, _req, _task|
+        raise child_error, "child raised"
+      end
+    end
+
+    res = async_request(app, :get, "/child")
+
+    assert_equal 400, res.status
+    assert_equal true, parse(res)[:handled]
+  end
+
+  def test_unhandled_error_becomes_clean_500
+    app = FunApi::App.new do |api|
+      api.get "/crash" do |_input, _req, _task|
+        raise "kaboom"
+      end
+    end
+
+    res = async_request(app, :get, "/crash")
+    data = parse(res)
+
+    assert_equal 500, res.status
+    assert_equal "Internal Server Error", data[:detail]
+  end
+
+  def test_unhandled_error_includes_detail_in_development
+    app = FunApi::App.new do |api|
+      api.get "/crash" do |_input, _req, _task|
+        raise "kaboom in dev"
+      end
+    end
+
+    original = ENV["FUNAPI_ENV"]
+    ENV["FUNAPI_ENV"] = "development"
+    begin
+      res = async_request(app, :get, "/crash")
+      data = parse(res)
+
+      assert_equal 500, res.status
+      assert_equal "RuntimeError", data[:detail][:error]
+      assert_equal "kaboom in dev", data[:detail][:message]
+      assert data[:detail][:backtrace].is_a?(Array)
+    ensure
+      ENV["FUNAPI_ENV"] = original
+    end
+  end
+
   private
 
   def double(_name)
