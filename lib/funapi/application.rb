@@ -71,17 +71,9 @@ module FunApi
     end
 
     def register(key, &block)
+      provider = block_provider(block)
       @container.register(key) do
-        if block.arity == 0
-          result = block.call
-          if result.is_a?(Array) && result.length == 2 && result[1].respond_to?(:call)
-            ManagedDependency.new(result[0], result[1])
-          else
-            SimpleDependency.new(result)
-          end
-        else
-          BlockDependency.new(block)
-        end
+        BlockDependency.new(provider)
       end
     end
 
@@ -190,6 +182,24 @@ module FunApi
     # end
 
     private
+
+    def block_provider(block)
+      return block if block.arity != 0
+
+      proc do |provide|
+        result = block.call
+        if result.is_a?(Array) && result.length == 2 && result[1].respond_to?(:call)
+          resource, cleanup = result
+          begin
+            provide.call(resource)
+          ensure
+            cleanup.call
+          end
+        else
+          provide.call(result)
+        end
+      end
+    end
 
     def add_route(verb, route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
       metadata = {

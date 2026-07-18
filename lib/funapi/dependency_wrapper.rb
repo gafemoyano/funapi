@@ -1,25 +1,10 @@
 # frozen_string_literal: true
 
 module FunApi
-  class SimpleDependency
+  class ManagedDependency
     attr_reader :resource
 
-    def initialize(resource)
-      @resource = resource
-    end
-
-    def call
-      @resource
-    end
-
-    def cleanup
-    end
-  end
-
-  class ManagedDependency
-    attr_reader :resource, :cleanup_proc
-
-    def initialize(resource, cleanup_proc)
+    def initialize(resource, cleanup_proc = nil)
       @resource = resource
       @cleanup_proc = cleanup_proc
     end
