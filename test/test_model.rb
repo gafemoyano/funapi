@@ -150,6 +150,14 @@ class TestModelValidate < Minitest::Test
     assert_equal({code: "ABC"}, klass.validate(code: "ABC"))
   end
 
+  def test_string_min_length
+    klass = Class.new(FunApi::Model) do
+      field :password, :string, min: 8
+    end
+    assert_raises(FunApi::ValidationError) { klass.validate(password: "short") }
+    assert_equal({password: "longenough"}, klass.validate(password: "longenough"))
+  end
+
   def test_nested_model_validation
     result = ModelUser.validate(id: 1, name: "Al", email: "a@b.com", address: {street: "Main"})
     assert_equal "Main", result[:address][:street]
@@ -260,6 +268,15 @@ class TestModelJsonSchema < Minitest::Test
     assert_equal 0, age[:minimum]
     assert_equal 120, age[:maximum]
     assert age[:nullable]
+  end
+
+  def test_string_min_maps_to_min_length
+    klass = Class.new(FunApi::Model) do
+      field :password, :string, min: 8, max: 64
+    end
+    props = klass.json_schema[:properties]["password"]
+    assert_equal 8, props[:minLength]
+    assert_equal 64, props[:maxLength]
   end
 
   def test_nested_model_inlined

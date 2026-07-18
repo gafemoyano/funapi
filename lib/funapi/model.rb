@@ -190,10 +190,21 @@ module FunApi
       def field_predicates(meta)
         predicates = {}
         predicates[:included_in?] = meta[:enum] if meta[:enum]
-        predicates[:gteq?] = meta[:min] if meta[:min]
-        predicates[:lteq?] = meta[:max] if meta[:max]
         predicates[:format?] = meta[:pattern] if meta[:pattern]
+
+        if numeric_type?(meta[:type])
+          predicates[:gteq?] = meta[:min] if meta[:min]
+          predicates[:lteq?] = meta[:max] if meta[:max]
+        else
+          predicates[:min_size?] = meta[:min] if meta[:min]
+          predicates[:max_size?] = meta[:max] if meta[:max]
+        end
+
         predicates
+      end
+
+      def numeric_type?(type)
+        %i[integer float decimal].include?(type)
       end
 
       def fetch(source, name)
@@ -265,11 +276,26 @@ module FunApi
         schema[:description] = meta[:description] if meta[:description]
         schema[:format] = meta[:format] if meta[:format]
         schema[:enum] = meta[:enum] if meta[:enum]
-        schema[:minimum] = meta[:min] if meta[:min]
-        schema[:maximum] = meta[:max] if meta[:max]
+        apply_bounds(schema, meta)
         schema[:pattern] = meta[:pattern].is_a?(Regexp) ? meta[:pattern].source : meta[:pattern] if meta[:pattern]
         schema[:nullable] = true if meta[:nullable]
         schema
+      end
+
+      def apply_bounds(schema, meta)
+        return unless meta[:min] || meta[:max]
+
+        type = meta[:type]
+        min_key, max_key = if numeric_type?(type)
+          %i[minimum maximum]
+        elsif type.is_a?(Array)
+          %i[minItems maxItems]
+        else
+          %i[minLength maxLength]
+        end
+
+        schema[min_key] = meta[:min] if meta[:min]
+        schema[max_key] = meta[:max] if meta[:max]
       end
     end
   end
