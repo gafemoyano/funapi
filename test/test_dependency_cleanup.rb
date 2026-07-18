@@ -214,10 +214,10 @@ class TestDependencyCleanup < Minitest::Test
       end
     end
 
-    assert_raises(StandardError) do
-      async_request(app, :get, "/test")
-    end
+    res = async_request(app, :get, "/test")
 
+    assert_equal 500, res.status
+    assert_equal "Internal Server Error", JSON.parse(res.body)["detail"]
     assert cleanup_called, "Cleanup should be called even when handler raises an unhandled exception"
   end
 

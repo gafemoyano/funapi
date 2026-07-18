@@ -29,7 +29,7 @@ class TestAsync < Minitest::Test
   def test_request_fiber_state_does_not_leak
     app = FunApi::App.new do |api|
       api.get "/state/:value" do |input, _req, _task|
-        Fiber[:funapi_test_state] = input[:path]["value"]
+        Fiber[:funapi_test_state] = input[:path][:value]
         [{value: Fiber[:funapi_test_state]}, 200]
       end
     end

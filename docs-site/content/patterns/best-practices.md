@@ -322,7 +322,7 @@ end
 @cache = {}
 
 api.get '/cached/:key' do |input, req, task|
-  key = input[:path]['key']
+  key = input[:path][:key]
   @cache[key] ||= expensive_fetch(key)  # Race condition!
 end
 
@@ -331,7 +331,7 @@ require 'concurrent'
 @cache = Concurrent::Map.new
 
 api.get '/cached/:key' do |input, req, task|
-  key = input[:path]['key']
+  key = input[:path][:key]
   @cache.compute_if_absent(key) { expensive_fetch(key) }
 end
 ```
