@@ -423,7 +423,13 @@ The roadmap lives on GitHub issues — the master plan is [#4](https://github.co
 3. FunApi::Model (#7)
 4. Streaming, SSE, WebSockets, Sequel bridge (#8)
 5. DX: CLI, reloading, TestClient, docs (#9)
-6. Agentic Experience (#10)
+6. Agentic Experience (#10) — in progress. Landed so far: `llms.txt` +
+   `llms-full.txt` served dynamically from `docs-site/app.rb`; `funapi check`
+   (boots the app, validates schemas/OpenAPI, detects spec drift vs.
+   `openapi.snapshot.json`, `--json` / `--update-snapshot`); a unified
+   `{detail: ...}` error contract everywhere (documented in
+   `docs-site/content/patterns/errors-reference.md`); MCP investigation at
+   `proposals/mcp-server.md`. The AX eval harness (Layer 3) is not yet built.
 
 ## Questions?
 
