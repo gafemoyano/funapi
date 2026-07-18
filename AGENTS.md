@@ -43,10 +43,10 @@ FunApi is a minimal, async-first Ruby web framework inspired by FastAPI. This fi
 ruby examples/middleware_demo.rb
 
 # OpenAPI demo (port 9292)
-ruby test/demo_openapi.rb
+ruby examples/demo_openapi.rb
 
 # Middleware test demo
-ruby test/demo_middleware.rb
+ruby examples/demo_middleware.rb
 ```
 
 ### Testing Changes
@@ -270,13 +270,13 @@ end
 
 1. Schema conversion: `lib/funapi/openapi/schema_converter.rb`
 2. Spec generation: `lib/funapi/openapi/spec_generator.rb`
-3. Test with `ruby test/demo_openapi.rb` and check `/docs`
+3. Test with `ruby examples/demo_openapi.rb` and check `/docs`
 
 ## Testing Instructions
 
 **Test Framework**: Minitest
 **Test Structure**: Flat (following Sidekiq pattern)
-**Current Status**: 174 tests, 487 assertions, all passing (~220ms)
+**Current Status**: run `bundle exec rake test` — the full suite passes in a few seconds
 
 ### Running Tests
 
@@ -397,20 +397,20 @@ end
 - `minitest` - Testing framework
 
 
-## Future Enhancements Roadmap
+## Roadmap
 
-See `README.md` for full list. Key priorities:
-1. ~~Dependency injection system~~ ✅ Done
-2. ~~Background tasks~~ ✅ Done
-3. ~~Template rendering~~ ✅ Done
-4. ~~Lifecycle hooks (startup/shutdown)~~ ✅ Done
-5. Path parameter type validation
-6. WebSocket support
+The roadmap lives on GitHub issues — the master plan is [#4](https://github.com/gafemoyano/funapi/issues/4), with one issue per phase (#5–#10):
+1. Harden the core (#5)
+2. Router composition & incremental adoption (#6)
+3. FunApi::Model (#7)
+4. Streaming, SSE, WebSockets, Sequel bridge (#8)
+5. DX: CLI, reloading, TestClient, docs (#9)
+6. Agentic Experience (#10)
 
 ## Questions?
 
 Check these resources:
 - `/examples` - Working demo applications
-- `/test` - Demo scripts showing features
-- `/.claude` - Implementation plans and notes
+- `/.claude/DECISIONS.md` - Architectural decision records
+- GitHub issues - Roadmap and active plans (master plan: #4)
 - `README.md` - User-facing documentation

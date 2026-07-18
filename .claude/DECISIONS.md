@@ -150,6 +150,8 @@ end
 
 ## Async-First Design (2024-09)
 
+> **⚠️ Superseded (2026-07):** the `task` parameter will be removed from the handler signature in Phase 4 (issue #8) in favor of structured-concurrency helpers. Old signature keeps working during a deprecation window.
+
 ### Decision: Async::Task as Third Handler Parameter
 
 **Context**: How to expose async capabilities to route handlers?
@@ -363,14 +365,43 @@ end
 
 ---
 
-## Future Decisions Pending
+## Vision & Positioning (2026-07)
 
-1. ~~**Dependency Injection**~~ ✅ Done
-2. **Background Tasks**: Post-response execution
-3. **Path Parameter Types**: Type coercion/validation
-4. **WebSocket Support**: Async integration
-5. **Content Negotiation**: JSON + others
-6. **Global Dependencies**: Apply to all routes
+### Decision: "The Ruby framework for streaming, AI-era APIs"
+
+**Context**: Sharpening the pitch beyond "Ruby's FastAPI". Rails won't be async for years; the socketry stack is mature; AI-era APIs are streaming-shaped.
+
+**Decision**: Position FunApi around async/streaming as the differentiator, with explicit schemas-as-values as both the DX and the agent-experience (AX) story. Roadmap tracked on GitHub (master plan: issue #4, phases #5–#10).
+
+---
+
+## FunApi::Model as Owned Facade (2026-07)
+
+### Decision: Own the public schema/model API; dry-schema is an engine, not the interface
+
+**Context**: dry-schema gives validation only — no serialization/filtering from objects, and exposing its DSL directly ties FunApi's public API to DryRB's ideology (the "Hanami trap").
+
+**Decision**: Build `FunApi::Model` — one declaration gives validation + coercion + serialization + JSON Schema. Wrap dry-schema internally at first; keep the option to replace the engine without breaking users. (Issue #7.)
+
+---
+
+## Sequel as the Blessed Data Layer (2026-07)
+
+### Decision: Sequel + fibered connection pool, not socketry's `db`
+
+**Context**: Evaluated trajectory, not just current state. Sequel: monthly releases, 300–700K downloads/version, 5K stars. socketry `db`: ~62K total downloads, 61 stars, sporadic commits — flat trajectory. `pg` >= 1.3 is fiber-scheduler-aware, so Sequel+pg is non-blocking under Falcon anyway.
+
+**Decision**: Bless Sequel with the vendored `FiberedConnectionPool` as The Path; drop `db`/`db-postgres` test dependencies. (Issue #8.)
+
+---
+
+## Knowledge Base on GitHub (2026-07)
+
+### Decision: Plans live in GitHub issues; this file records decisions only
+
+**Context**: `.claude/` had accumulated 14 dated plan/status files for completed work.
+
+**Decision**: Historical plan files deleted. Roadmap and active plans are GitHub issues (master: #4). This file remains the ADR log.
 
 ---
 
@@ -385,6 +416,8 @@ end
 **Reason**: Explicit is better than implicit.
 
 ### Database Integration
+> **⚠️ Superseded (2026-07):** see "Sequel as the Blessed Data Layer" below. FunApi still won't ship an ORM, but it now documents and tests one blessed path.
+
 **Decision**: No built-in ORM or database layer.
 **Reason**: Users choose their own (Sequel, ROM, ActiveRecord).
 
@@ -392,6 +425,7 @@ end
 
 ## Change Log
 
+- 2026-07-18: Vision/positioning, FunApi::Model, Sequel bet, GitHub knowledge base; superseded task-param and no-database decisions
 - 2024-10-27: Added dependency injection decisions
 - 2024-10-26: Testing, middleware, documentation strategies
 - 2024-09: Initial core framework decisions
