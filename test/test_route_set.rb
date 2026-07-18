@@ -57,7 +57,7 @@ class TestRouteSet < Minitest::Test
 
     assert_equal 404, status
     assert_equal "application/json", headers["content-type"]
-    assert_equal '{"error":"Not found"}', body.first
+    assert_equal '{"detail":"Not Found"}', body.first
   end
 
   def test_different_verbs_same_path

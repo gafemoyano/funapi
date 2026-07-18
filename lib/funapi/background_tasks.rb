@@ -37,7 +37,7 @@ module FunApi
       kwargs = task_def[:kwargs]
 
       unless callable.respond_to?(:call)
-        raise ArgumentError, "Task must be callable, got #{callable.class}"
+        raise ArgumentError, "background task must be callable (a proc, lambda, or method) — got #{callable.class}"
       end
 
       if kwargs.empty?

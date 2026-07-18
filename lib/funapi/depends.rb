@@ -38,7 +38,8 @@ module FunApi
     def validate_callable!
       return if @callable.respond_to?(:call)
 
-      raise ArgumentError, "Dependency must be callable (respond to :call)"
+      raise ArgumentError,
+        "dependency must be callable (respond to :call) — pass a proc, lambda, method, or an object with a #call method; got #{@callable.class}"
     end
 
     def resolve_sub_dependencies(context, cache)
@@ -50,7 +51,8 @@ module FunApi
         elsif dep.is_a?(Symbol)
           container = context[:container]
           unless container&.respond_to?(:resolve)
-            raise ArgumentError, "Cannot resolve symbol dependency :#{dep} without container in context"
+            raise ArgumentError,
+              "cannot resolve symbol dependency :#{dep} — it must name a dependency registered with api.register(:#{dep}) { ... }"
           end
 
           wrapper = container.resolve(dep)

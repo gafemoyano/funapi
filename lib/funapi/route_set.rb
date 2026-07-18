@@ -7,7 +7,7 @@ module FunApi
     Route = Struct.new(:verb, :pattern, :keys, :handler, :metadata)
     Mount = Struct.new(:prefix, :app)
 
-    NOT_FOUND = [404, {"content-type" => "application/json"}, [JSON.dump(error: "Not found")]].freeze
+    NOT_FOUND = [404, {"content-type" => "application/json"}, [JSON.dump(detail: "Not Found")]].freeze
 
     def initialize
       @routes = []
