@@ -57,29 +57,34 @@ Handlers return a tuple of `[data, status_code]`:
 [created_user, 201]          # Created
 ```
 
-## Schemas
+## Models
 
-Schemas define the shape of request and response data using dry-schema:
+A `FunApi::Model` defines the shape of request and response data. One
+declaration gives you validation + coercion, serialization, and an OpenAPI
+schema — while validated data stays a plain `Hash`.
 
 ```ruby
-UserSchema = FunApi::Schema.define do
-  required(:name).filled(:string)
-  required(:email).filled(:string)
-  optional(:age).filled(:integer)
+class User < FunApi::Model
+  field :name,  :string
+  field :email, :string, format: "email"
+  field :age,   :integer, optional: true
 end
 ```
 
-Apply schemas to routes:
+Apply a model to a route — `body:`, `query:`, `path:`, and `response_schema:`
+all accept a model class (or `[Model]` for a collection):
 
 ```ruby
-api.post '/users', body: UserSchema do |input, req, task|
-  # input[:body] is validated and coerced
-end
-
-api.get '/users', query: QuerySchema do |input, req, task|
-  # input[:query] is validated
+api.post "/users", body: User, response_schema: User do |input, req|
+  input[:body]      # validated and coerced Hash
+  [db_user, 201]    # object serialized + filtered by User
 end
 ```
+
+See [Validation](/essential/validation) for the full field reference.
+
+> The older `FunApi::Schema.define` DSL (a thin wrapper over dry-schema) still
+> works everywhere a model is accepted, but `FunApi::Model` is preferred.
 
 ## Async Task
 

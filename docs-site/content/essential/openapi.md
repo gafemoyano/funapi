@@ -59,18 +59,23 @@ end
 
 ### Schemas
 
-Schemas become OpenAPI components:
+Models become OpenAPI components:
 
 ```ruby
-UserSchema = FunApi::Schema.define do
-  required(:name).filled(:string)
-  required(:email).filled(:string)
+class UserCreate < FunApi::Model
+  field :name,  :string
+  field :email, :string, format: "email"
 end
 
-api.post '/users', body: UserSchema do |input, req, task|
-  # Request body documented with UserSchema
+api.post '/users', body: UserCreate do |input, req|
+  # Request body documented with the UserCreate schema
 end
 ```
+
+Field metadata flows straight into the schema — `description:`, `format:`,
+`enum:`, `min:`/`max:`, `pattern:`, `nullable:`, and nested models all appear in
+the generated component. `FunApi::Schema.define` schemas are documented too
+(legacy path).
 
 ### Response Schemas
 
@@ -147,15 +152,20 @@ Access the raw spec at `/openapi.json`:
 
 ## Schema Names
 
-Schema names in OpenAPI come from your Ruby constant names:
+A model's component name is its class name (demodulized):
 
 ```ruby
-UserCreateSchema = FunApi::Schema.define { ... }
-# Becomes "UserCreateSchema" in OpenAPI
+class UserCreate < FunApi::Model; end
+# Becomes "UserCreate" in OpenAPI
 
-UserOutputSchema = FunApi::Schema.define { ... }
-# Becomes "UserOutputSchema" in OpenAPI
+module Api
+  class UserOut < FunApi::Model; end
+end
+# Becomes "UserOut" in OpenAPI
 ```
+
+Legacy `FunApi::Schema.define` schemas are named after the Ruby constant they
+are assigned to (e.g. `UserOutputSchema`).
 
 ## Use Cases
 
