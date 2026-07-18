@@ -329,25 +329,22 @@ module FunApi
 
           ENV["FUNAPI_ENV"] ||= "development"
 
-          Async do |task|
-            endpoint = Async::HTTP::Endpoint.parse("http://#{@bind}:#{@port}")
-            server = Falcon::Server.new(Protocol::Rack::Adapter.new(app), endpoint)
-            app.run_startup_hooks if app.respond_to?(:run_startup_hooks)
+          %i[INT TERM].each do |signal|
+            trap(signal) { exit }
+          end
 
-            server_task = task.async { server.run }
-
-            %i[INT TERM].each do |signal|
-              trap(signal) { server_task.stop }
-            end
-
-            begin
-              server_task.wait
-            rescue Async::Stop, Interrupt
-              nil
-            ensure
-              app.run_shutdown_hooks if app.respond_to?(:run_shutdown_hooks)
-            end
-          end.wait
+          begin
+            Async do |task|
+              endpoint = Async::HTTP::Endpoint.parse("http://#{@bind}:#{@port}")
+              server = Falcon::Server.new(Protocol::Rack::Adapter.new(app), endpoint)
+              app.run_startup_hooks if app.respond_to?(:run_startup_hooks)
+              server.run
+            end.wait
+          rescue Interrupt
+            nil
+          ensure
+            app.run_shutdown_hooks if app.respond_to?(:run_shutdown_hooks)
+          end
         end
       end
     end
