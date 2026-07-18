@@ -144,7 +144,7 @@ class TestAsync < Minitest::Test
   def test_multiple_concurrent_requests
     app = FunApi::App.new do |api|
       api.get "/hello/:id" do |input, _req, _task|
-        id = input[:path]["id"]
+        id = input[:path][:id]
         [{id: id, message: "hello"}, 200]
       end
     end
@@ -281,7 +281,7 @@ class TestAsync < Minitest::Test
   def test_parallel_data_fetching
     app = FunApi::App.new do |api|
       api.get "/dashboard/:id" do |input, _req, task|
-        user_id = input[:path]["id"]
+        user_id = input[:path][:id]
 
         user_task = task.async do
           sleep 0.01

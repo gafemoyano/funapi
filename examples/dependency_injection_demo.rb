@@ -133,7 +133,7 @@ app = FunApi::App.new(
 
   api.get "/users/:id",
     depends: [:db] do |input, _req, _task, db:|
-    user = db.find_user(input[:path]["id"])
+    user = db.find_user(input[:path][:id])
     raise FunApi::HTTPException.new(status_code: 404, detail: "User not found") unless user
 
     [user, 200]

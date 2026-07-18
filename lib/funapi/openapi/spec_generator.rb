@@ -60,12 +60,18 @@ module FunApi
       end
 
       def build_path_parameters(route)
+        path_schema = route.metadata[:path_schema]
+        json_schema = path_schema ? SchemaConverter.to_json_schema(unwrap_array_schema(path_schema)) : nil
+        properties = json_schema && json_schema[:properties]
+
         route.keys.map do |key|
+          prop_schema = properties && (properties[key] || properties[key.to_s])
+
           {
             name: key,
             in: "path",
             required: true,
-            schema: {type: "string"}
+            schema: prop_schema || {type: "string"}
           }
         end
       end

@@ -46,6 +46,26 @@ api.get '/search', query: SearchSchema do |input, req, task|
 end
 ```
 
+### Path Validation
+
+Path parameters are strings by default. Pass a `path:` schema to validate and
+coerce them, symmetric with `query:` and `body:`:
+
+```ruby
+UserIdSchema = FunApi::Schema.define do
+  required(:id).filled(:integer)
+end
+
+api.get '/users/:id', path: UserIdSchema do |input, req, task|
+  input[:path][:id]  # => 42 (Integer, coerced from "42")
+  [{ id: input[:path][:id] }, 200]
+end
+```
+
+A request like `GET /users/not-a-number` returns a `422` with a
+`loc: ["id"]` error. The declared types also flow into the generated OpenAPI
+path parameters (e.g. `type: integer` instead of the default `type: string`).
+
 ### Response Validation
 
 Filter and validate response data:
@@ -58,7 +78,7 @@ UserOutputSchema = FunApi::Schema.define do
 end
 
 api.get '/users/:id', response_schema: UserOutputSchema do |input, req, task|
-  user = find_user(input[:path]['id'])
+  user = find_user(input[:path][:id])
   # password and other fields are filtered out
   [user, 200]
 end

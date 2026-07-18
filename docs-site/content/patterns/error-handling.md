@@ -12,7 +12,7 @@ Raise `HTTPException` to return an error response:
 
 ```ruby
 api.get '/users/:id' do |input, req, task|
-  user = find_user(input[:path]['id'])
+  user = find_user(input[:path][:id])
   
   unless user
     raise FunApi::HTTPException.new(
@@ -96,6 +96,55 @@ Response (422):
 }
 ```
 
+## Registered Exception Handlers
+
+Register a handler for a specific exception class with `exception_handler`. The
+block receives the raised error and the `Rack::Request`, and returns the usual
+`[payload, status]` tuple:
+
+```ruby
+class RecordNotFound < StandardError; end
+
+app = FunApi::App.new do |api|
+  api.exception_handler(RecordNotFound) do |error, req|
+    [{ detail: error.message }, 404]
+  end
+
+  api.get '/users/:id' do |input, req, task|
+    user = find_user(input[:path][:id])
+    raise RecordNotFound, "User not found" unless user
+    [{ user: user }, 200]
+  end
+end
+```
+
+Handlers are matched by class ancestry, so a handler registered for a base
+class also catches its subclasses. The most specific registered class wins.
+
+## Unhandled Errors (500 catch-all)
+
+Any `StandardError` that is not an `HTTPException` and has no registered handler
+becomes a clean JSON `500` response:
+
+```json
+{
+  "detail": "Internal Server Error"
+}
+```
+
+To aid debugging, the error class, message, and backtrace are included only when
+running in development (`FUNAPI_ENV` or `RACK_ENV` set to `development`):
+
+```json
+{
+  "detail": {
+    "error": "RuntimeError",
+    "message": "something broke",
+    "backtrace": ["app.rb:12:in ...", "..."]
+  }
+}
+```
+
 ## Handling Exceptions in Handlers
 
 Use standard Ruby exception handling:
@@ -145,8 +194,8 @@ end
 
 # Usage
 api.get '/users/:id' do |input, req, task|
-  user = find_user(input[:path]['id'])
-  raise NotFoundError.new('User', input[:path]['id']) unless user
+  user = find_user(input[:path][:id])
+  raise NotFoundError.new('User', input[:path][:id]) unless user
   [{ user: user }, 200]
 end
 ```

@@ -28,9 +28,10 @@ The `input` hash normalizes all request data:
 
 ```ruby
 api.post '/users/:id' do |input, req, task|
-  input[:path]   # Path parameters: { 'id' => '123' }
-  input[:query]  # Query params: { search: 'ruby' }
-  input[:body]   # Parsed JSON body: { name: 'Alice' }
+  input[:path]     # Path parameters: { id: '123' }
+  input[:query]    # Query params: { search: 'ruby' }
+  input[:body]     # Parsed JSON body: { name: 'Alice' }
+  input[:headers]  # Request headers: { 'content-type' => 'application/json' }
 end
 ```
 
@@ -38,8 +39,8 @@ end
 
 ```ruby
 api.get '/posts/:post_id/comments/:id' do |input, req, task|
-  post_id = input[:path]['post_id']
-  comment_id = input[:path]['id']
+  post_id = input[:path][:post_id]
+  comment_id = input[:path][:id]
   # ...
 end
 ```

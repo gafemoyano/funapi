@@ -27,7 +27,7 @@ class TestFunApi < Minitest::Test
       end
 
       app.get "/users/:id" do |input, _req, _task|
-        [{id: input[:path]["id"], ok: true}, 200]
+        [{id: input[:path][:id], ok: true}, 200]
       end
 
       app.post "/users", body: user_schema do |input, _req, _task|
@@ -36,11 +36,11 @@ class TestFunApi < Minitest::Test
       end
 
       app.put "/users/:id" do |input, _req, _task|
-        [{updated: true, id: input[:path]["id"], attrs: input[:body]}, 200]
+        [{updated: true, id: input[:path][:id], attrs: input[:body]}, 200]
       end
 
       app.delete "/users/:id" do |input, _req, _task|
-        [{deleted: true, id: input[:path]["id"]}, 200]
+        [{deleted: true, id: input[:path][:id]}, 200]
       end
 
       app.get "/validated", query: query_schema do |input, _req, _task|
@@ -141,5 +141,38 @@ class TestFunApi < Minitest::Test
   def test_content_type_header_is_json
     res = request(:get, "/hello")
     assert_equal "application/json", res["content-type"]
+  end
+
+  def test_path_params_have_symbol_keys
+    captured = nil
+    app = FunApi::App.new do |api|
+      api.get "/items/:item_id" do |input, _req, _task|
+        captured = input[:path]
+        [{ok: true}, 200]
+      end
+    end
+
+    Async { Rack::MockRequest.new(app).get("/items/abc") }.wait
+
+    assert_equal({item_id: "abc"}, captured)
+  end
+
+  def test_input_includes_downcased_headers
+    captured = nil
+    app = FunApi::App.new do |api|
+      api.get "/headers" do |input, _req, _task|
+        captured = input[:headers]
+        [{ok: true}, 200]
+      end
+    end
+
+    Async do
+      Rack::MockRequest.new(app).get("/headers",
+        "HTTP_X_CUSTOM_HEADER" => "value",
+        "HTTP_AUTHORIZATION" => "Bearer token")
+    end.wait
+
+    assert_equal "value", captured["x-custom-header"]
+    assert_equal "Bearer token", captured["authorization"]
   end
 end

@@ -34,7 +34,7 @@ app = FunApi::App.new(
   end
 
   api.get "/users/:id", response_schema: UserOutputSchema do |input, _req, _task|
-    user_id = input[:path]["id"]
+    user_id = input[:path][:id]
     user = {id: user_id.to_i, name: "John Doe", email: "john@example.com", age: 30}
     [user, 200]
   end
@@ -45,7 +45,7 @@ app = FunApi::App.new(
   end
 
   api.put "/users/:id", body: UserCreateSchema, response_schema: UserOutputSchema do |input, _req, _task|
-    user_id = input[:path]["id"]
+    user_id = input[:path][:id]
     user = input[:body].merge(id: user_id.to_i)
     [user, 200]
   end

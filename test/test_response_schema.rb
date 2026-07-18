@@ -49,7 +49,7 @@ class TestResponseSchema < Minitest::Test
 
     app = FunApi::App.new do |api|
       api.get "/user/:id", response_schema: output_schema do |input, _req, _task|
-        if input[:path]["id"] == "1"
+        if input[:path][:id] == "1"
           [{id: 1, name: "Alice", email: "alice@example.com"}, 200]
         else
           [{id: 2, name: "Bob"}, 200]

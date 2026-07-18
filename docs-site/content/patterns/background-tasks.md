@@ -22,7 +22,9 @@ api.post '/signup', body: UserSchema do |input, req, task, background:|
 end
 ```
 
-The client receives the response immediately. The tasks execute afterward.
+The client receives the response immediately. The tasks execute afterward, in
+the order they were added, and before request-scoped dependencies are cleaned
+up — so any dependencies captured in a task's closure are still usable.
 
 ## Adding Tasks
 

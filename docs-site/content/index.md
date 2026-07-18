@@ -67,7 +67,7 @@ require 'funapi/server/falcon'
 
 app = FunApi::App.new do |api|
   api.get '/hello/:name' do |input, req, task|
-    name = input[:path]['name']
+    name = input[:path][:name]
     [{ message: "Hello, #{name}!" }, 200]
   end
 end

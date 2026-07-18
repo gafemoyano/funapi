@@ -37,7 +37,7 @@ app = FunApi::App.new(
   end
 
   api.get '/hello/:name' do |input, req, task|
-    name = input[:path]['name']
+    name = input[:path][:name]
     [{ message: "Hello, #{name}!" }, 200]
   end
 end

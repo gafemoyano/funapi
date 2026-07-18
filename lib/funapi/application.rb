@@ -24,6 +24,7 @@ module FunApi
       @container = Dry::Container.new
       @startup_hooks = []
       @shutdown_hooks = []
+      @exception_handlers = {}
       @openapi_config = {
         title: title,
         version: version,
@@ -61,18 +62,17 @@ module FunApi
       end
     end
 
+    def exception_handler(exception_class, &block)
+      raise ArgumentError, "exception_handler requires a block" unless block_given?
+
+      @exception_handlers[exception_class] = block
+      self
+    end
+
     def register(key, &block)
+      provider = block_provider(block)
       @container.register(key) do
-        if block.arity == 0
-          result = block.call
-          if result.is_a?(Array) && result.length == 2 && result[1].respond_to?(:call)
-            ManagedDependency.new(result[0], result[1])
-          else
-            SimpleDependency.new(result)
-          end
-        else
-          BlockDependency.new(block)
-        end
+        BlockDependency.new(provider)
       end
     end
 
@@ -80,27 +80,31 @@ module FunApi
       @container.resolve(key)
     end
 
-    def get(path, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("GET", path, query: query, response_schema: response_schema, depends: depends, &blk)
+    def get(route_path, path: nil, query: nil, response_schema: nil, depends: nil, &blk)
+      add_route("GET", route_path, path: path, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
-    def post(path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("POST", path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
+    def post(route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
+      add_route("POST", route_path, path: path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
-    def put(path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("PUT", path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
+    def put(route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
+      add_route("PUT", route_path, path: path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
-    def patch(path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("PATCH", path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
+    def patch(route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
+      add_route("PATCH", route_path, path: path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
-    def delete(path, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("DELETE", path, query: query, response_schema: response_schema, depends: depends, &blk)
+    def delete(route_path, path: nil, query: nil, response_schema: nil, depends: nil, &blk)
+      add_route("DELETE", route_path, path: path, query: query, response_schema: response_schema, depends: depends, &blk)
     end
 
     def use(middleware, *args, &block)
+      if @middleware_chain
+        raise "Cannot add middleware after the application has started handling requests"
+      end
+
       @middleware_stack << [middleware, args, block]
       self
     end
@@ -134,8 +138,8 @@ module FunApi
     end
 
     def call(env)
-      app = build_middleware_chain
-      app.call(env)
+      @middleware_chain ||= build_middleware_chain
+      @middleware_chain.call(env)
     end
 
     # Run the app with Falcon
@@ -178,31 +182,54 @@ module FunApi
 
     private
 
-    def add_route(verb, path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
+    def block_provider(block)
+      return block if block.arity != 0
+
+      proc do |provide|
+        result = block.call
+        if result.is_a?(Array) && result.length == 2 && result[1].respond_to?(:call)
+          resource, cleanup = result
+          begin
+            provide.call(resource)
+          ensure
+            cleanup.call
+          end
+        else
+          provide.call(result)
+        end
+      end
+    end
+
+    def add_route(verb, route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
       metadata = {
+        path_schema: path,
         body_schema: body,
         query_schema: query,
         response_schema: response_schema,
         dependencies: normalize_dependencies(depends)
       }
 
-      @router.add(verb, path, metadata: metadata) do |req, path_params|
-        handle_async_route(req, path_params, body, query, response_schema, metadata[:dependencies], &blk)
+      @router.add(verb, route_path, metadata: metadata) do |req, path_params|
+        handle_async_route(req, path_params, path, body, query, response_schema, metadata[:dependencies], &blk)
       end
     end
 
-    def handle_async_route(req, path_params, body_schema, query_schema, response_schema, dependencies, &blk)
+    def handle_async_route(req, path_params, path_schema, body_schema, query_schema, response_schema, dependencies, &blk)
       current_task = Async::Task.current
       Fiber[:async_task] = current_task
       cleanup_objects = []
       background_tasks = BackgroundTasks.new(current_task)
+      deferred = false
 
       begin
         input = {
-          path: path_params,
+          path: path_params.transform_keys(&:to_sym),
           query: req.params,
-          body: parse_body(req)
+          body: parse_body(req),
+          headers: extract_headers(req.env)
         }
+
+        input[:path] = Schema.validate(path_schema, input[:path], location: "path") if path_schema
 
         input[:query] = Schema.validate(query_schema, input[:query], location: "query") if query_schema
 
@@ -217,34 +244,96 @@ module FunApi
 
         payload, status = blk.call(input, req, current_task, **resolved_deps)
 
-        if payload.is_a?(TemplateResponse)
-          background_tasks.execute
-          return payload.to_response
+        response = if payload.is_a?(TemplateResponse)
+          payload.to_response
+        else
+          payload = normalize_payload(payload)
+          payload = Schema.validate_response(response_schema, payload) if response_schema
+
+          [
+            status || 200,
+            {"content-type" => "application/json"},
+            [JSON.dump(payload)]
+          ]
         end
 
-        payload = normalize_payload(payload)
+        unless background_tasks.empty? && cleanup_objects.empty?
+          schedule_post_response(current_task, background_tasks, cleanup_objects)
+          deferred = true
+        end
 
-        payload = Schema.validate_response(response_schema, payload) if response_schema
-
-        background_tasks.execute
-
-        [
-          status || 200,
-          {"content-type" => "application/json"},
-          [JSON.dump(payload)]
-        ]
-      rescue ValidationError => e
-        e.to_response
-      rescue HTTPException => e
-        e.to_response
+        response
+      rescue => e
+        handle_exception(e, req)
       ensure
-        cleanup_objects.each do |wrapper|
-          wrapper.cleanup
-        rescue => e
-          warn "Dependency cleanup failed: #{e.message}"
-        end
+        run_cleanup(cleanup_objects) unless deferred
         Fiber[:async_task] = nil
       end
+    end
+
+    def schedule_post_response(task, background_tasks, cleanup_objects)
+      task.async do |post_task|
+        post_task.sleep(0)
+        background_tasks.execute
+      ensure
+        run_cleanup(cleanup_objects)
+      end
+    end
+
+    def run_cleanup(cleanup_objects)
+      cleanup_objects.each do |wrapper|
+        wrapper.cleanup
+      rescue => e
+        warn "Dependency cleanup failed: #{e.message}"
+      end
+    end
+
+    def handle_exception(error, req)
+      handler = find_exception_handler(error.class)
+
+      if handler
+        payload, status = handler.call(error, req)
+        return [
+          status || 500,
+          {"content-type" => "application/json"},
+          [JSON.dump(normalize_payload(payload))]
+        ]
+      end
+
+      return error.to_response if error.is_a?(HTTPException)
+
+      internal_server_error_response(error)
+    end
+
+    def find_exception_handler(error_class)
+      error_class.ancestors.each do |ancestor|
+        handler = @exception_handlers[ancestor]
+        return handler if handler
+      end
+      nil
+    end
+
+    def internal_server_error_response(error)
+      detail = if development_env?
+        {
+          error: error.class.name,
+          message: error.message,
+          backtrace: error.backtrace&.first(10)
+        }
+      else
+        "Internal Server Error"
+      end
+
+      [
+        500,
+        {"content-type" => "application/json"},
+        [JSON.dump(detail: detail)]
+      ]
+    end
+
+    def development_env?
+      env = ENV["FUNAPI_ENV"] || ENV["RACK_ENV"]
+      env == "development"
     end
 
     def build_middleware_chain
@@ -307,10 +396,15 @@ module FunApi
 
       case content_type
       when %r{application/json}
+        return {} if body.nil? || body.strip.empty?
+
         begin
           JSON.parse(body, symbolize_names: true)
-        rescue
-          {}
+        rescue JSON::ParserError => e
+          raise HTTPException.new(
+            status_code: 400,
+            detail: [{loc: ["body"], msg: "Invalid JSON: #{e.message}", type: "json_invalid"}]
+          )
         end
       when %r{application/x-www-form-urlencoded}
         request.POST
@@ -320,8 +414,11 @@ module FunApi
     end
 
     def extract_headers(env)
-      env.select { |k, _v| k.start_with?("HTTP_") }
-        .transform_keys { |k| k.sub("HTTP_", "").downcase }
+      headers = env.select { |k, _v| k.start_with?("HTTP_") }
+        .transform_keys { |k| k.delete_prefix("HTTP_").downcase.tr("_", "-") }
+      headers["content-type"] = env["CONTENT_TYPE"] if env["CONTENT_TYPE"]
+      headers["content-length"] = env["CONTENT_LENGTH"] if env["CONTENT_LENGTH"]
+      headers
     end
 
     def normalize_response(response)
@@ -444,6 +541,8 @@ module FunApi
       end
 
       [resolved, cleanup_objects]
+    rescue HTTPException
+      raise
     rescue => e
       raise HTTPException.new(
         status_code: 500,

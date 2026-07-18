@@ -53,7 +53,7 @@ app = FunApi::App.new do |api|
   end
 
   api.get '/users/:id' do |input, req, task|
-    user = DB[:users].where(id: input[:path]['id']).first
+    user = DB[:users].where(id: input[:path][:id]).first
     raise FunApi::HTTPException.new(status_code: 404) unless user
     [{ user: user }, 200]
   end
@@ -152,7 +152,7 @@ With async-compatible drivers, run queries concurrently:
 
 ```ruby
 api.get '/dashboard/:id' do |input, req, task|
-  id = input[:path]['id']
+  id = input[:path][:id]
 
   user = task.async { DB[:users].where(id: id).first }
   posts = task.async { DB[:posts].where(user_id: id).limit(10).all }

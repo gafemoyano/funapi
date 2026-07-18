@@ -46,7 +46,7 @@ app = FunApi::App.new(
   end
 
   api.patch "/todos/:id/toggle" do |input, _req, _task|
-    todo_id = input[:path]["id"].to_i
+    todo_id = input[:path][:id].to_i
     todo = TODOS.find { |t| t[:id] == todo_id }
 
     unless todo
@@ -61,7 +61,7 @@ app = FunApi::App.new(
   end
 
   api.delete "/todos/:id" do |input, _req, _task|
-    todo_id = input[:path]["id"].to_i
+    todo_id = input[:path][:id].to_i
     TODOS.reject! { |t| t[:id] == todo_id }
 
     FunApi::TemplateResponse.new("")

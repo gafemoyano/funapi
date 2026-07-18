@@ -24,7 +24,7 @@ Run multiple operations in parallel:
 
 ```ruby
 api.get '/dashboard/:id' do |input, req, task|
-  id = input[:path]['id']
+  id = input[:path][:id]
 
   # These run concurrently
   user_task = task.async { fetch_user(id) }
@@ -248,7 +248,7 @@ end
 
 ```ruby
 api.get '/user/:id/feed' do |input, req, task|
-  user_id = input[:path]['id']
+  user_id = input[:path][:id]
 
   # Fetch user and check permissions first
   user = fetch_user(user_id)

@@ -293,7 +293,7 @@ class TestDbPostgresIntegration < Minitest::Test
       api.register(:db) { client }
 
       api.get "/user/:id", depends: [:db], response_schema: response_schema do |input, _req, _task, db:|
-        user_id = input[:path]["id"].to_i
+        user_id = input[:path][:id].to_i
 
         session = db.session
         result = session.call("SELECT #{user_id} AS id, 'Test User' AS name, 'secret' AS password")
