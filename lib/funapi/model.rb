@@ -180,10 +180,16 @@ module FunApi
       end
 
       def apply_array(node, inner, meta)
-        if model_type?(inner)
-          node.array(inner.engine_schema)
+        size = {}
+        size[:min_size?] = meta[:min] if meta[:min]
+        size[:max_size?] = meta[:max] if meta[:max]
+
+        member = model_type?(inner) ? inner.engine_schema : inner
+
+        if size.empty?
+          node.array(member)
         else
-          node.array(inner)
+          node.value(:array, **size).each(member)
         end
       end
 

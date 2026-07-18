@@ -150,6 +150,30 @@ class TestModelValidate < Minitest::Test
     assert_equal({code: "ABC"}, klass.validate(code: "ABC"))
   end
 
+  def test_array_size_bounds_enforced
+    klass = Class.new(FunApi::Model) do
+      field :tags, [:string], min: 2, max: 3
+    end
+
+    error = assert_raises(FunApi::ValidationError) { klass.validate(tags: ["one"]) }
+    assert(error.detail.any? { |e| e[:loc].include?("tags") })
+    assert_raises(FunApi::ValidationError) { klass.validate(tags: %w[a b c d]) }
+    assert_equal({tags: %w[a b]}, klass.validate(tags: %w[a b]))
+    assert_equal({tags: [1, 2]}, Class.new(FunApi::Model) { field :tags, [:integer], min: 2 }.validate(tags: %w[1 2]))
+
+    schema = klass.json_schema[:properties]["tags"]
+    assert_equal 2, schema[:minItems]
+    assert_equal 3, schema[:maxItems]
+  end
+
+  def test_array_of_models_size_bounds_enforced
+    item = Class.new(FunApi::Model) { field :name, :string }
+    klass = Class.new(FunApi::Model) { field :items, [item], min: 1 }
+
+    assert_raises(FunApi::ValidationError) { klass.validate(items: []) }
+    assert_equal({items: [{name: "x"}]}, klass.validate(items: [{name: "x"}]))
+  end
+
   def test_string_min_length
     klass = Class.new(FunApi::Model) do
       field :password, :string, min: 8
