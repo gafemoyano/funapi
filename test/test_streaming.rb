@@ -12,6 +12,20 @@ class TestStreaming < Minitest::Test
     [status, headers, io.string]
   end
 
+  def test_websocket_routes_excluded_from_openapi
+    app = FunApi::App.new do |api|
+      api.get("/hi") { |_input, _req| [{ok: true}, 200] }
+      api.websocket("/ws") { |_socket, _input| }
+    end
+
+    res = nil
+    Async { res = Rack::MockRequest.new(app).get("/openapi.json") }.wait
+    paths = JSON.parse(res.body)["paths"].keys
+
+    assert_includes paths, "/hi"
+    refute_includes paths, "/ws"
+  end
+
   def test_streaming_response_writes_chunks
     app = FunApi::App.new do |api|
       api.get "/stream" do |_input, _req|

@@ -33,7 +33,7 @@ module FunApi
         paths = {}
 
         @routes.each do |route|
-          next if route.metadata[:internal]
+          next if route.metadata[:internal] || route.metadata[:websocket]
 
           path_template = convert_path_template(route.metadata[:path_template])
           paths[path_template] ||= {}
