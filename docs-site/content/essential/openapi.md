@@ -38,11 +38,11 @@ This appears in the OpenAPI spec and Swagger UI header.
 All routes are automatically included:
 
 ```ruby
-api.get '/users' do |input, req, task|
+api.get '/users' do |input, req|
   # Documented as GET /users
 end
 
-api.post '/users' do |input, req, task|
+api.post '/users' do |input, req|
   # Documented as POST /users
 end
 ```
@@ -52,7 +52,7 @@ end
 Path parameters are extracted and documented:
 
 ```ruby
-api.get '/users/:id' do |input, req, task|
+api.get '/users/:id' do |input, req|
   # Documented with {id} parameter
 end
 ```
@@ -82,7 +82,7 @@ the generated component. `FunApi::Schema.define` schemas are documented too
 Response schemas document the output:
 
 ```ruby
-api.get '/users/:id', response_schema: UserOutputSchema do |input, req, task|
+api.get '/users/:id', response_schema: UserOutputSchema do |input, req|
   # Response documented with UserOutputSchema
 end
 ```
@@ -95,7 +95,7 @@ grouped together:
 
 ```ruby
 UsersRouter = FunApi::Router.new(prefix: '/users', tags: ['users']) do |r|
-  r.get '/' do |input, req, task|
+  r.get '/' do |input, req|
     # Documented under the "users" tag
     [[], 200]
   end
@@ -107,7 +107,7 @@ api.include_router(UsersRouter)
 Router tags and inclusion-site tags accumulate, and a route can add its own:
 
 ```ruby
-r.get '/audit', tags: ['admin'] do |input, req, task|
+r.get '/audit', tags: ['admin'] do |input, req|
   # Tagged with both the router's tags and "admin"
 end
 ```

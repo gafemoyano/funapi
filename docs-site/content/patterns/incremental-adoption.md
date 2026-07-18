@@ -27,7 +27,7 @@ require 'funapi'
 require_relative 'legacy_app'
 
 api = FunApi::App.new(title: 'New API') do |app|
-  app.get '/status' do |input, req, task|
+  app.get '/status' do |input, req|
     [{ ok: true }, 200]
   end
 end
@@ -56,7 +56,7 @@ routes file:
 require 'funapi'
 
 MyApi = FunApi::App.new(title: 'Embedded API') do |app|
-  app.get '/health' do |input, req, task|
+  app.get '/health' do |input, req|
     [{ status: 'up' }, 200]
   end
 end
@@ -86,7 +86,7 @@ Sinatra app, a static file server, a legacy Rack handler, or a lambda:
 require 'rack/static'
 
 app = FunApi::App.new do |api|
-  api.get '/users' do |input, req, task|
+  api.get '/users' do |input, req|
     [{ users: [] }, 200]
   end
 

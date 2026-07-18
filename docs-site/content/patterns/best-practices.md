@@ -10,9 +10,10 @@ FunApi runs on Falcon, an async HTTP server using Ruby's fiber-based concurrency
 
 FunApi's request lifecycle guarantees:
 
-- The third route-handler argument is the current `Async::Task`.
-- Spawn child work with `task.async` and wait for the child tasks you start.
-- Use `task.with_timeout` for cooperative cancellation at async yield points.
+- Handlers take two arguments, `|input, req|`, and run inside the current `Async::Task`.
+- Spawn child work with `FunApi.async` and wait for the child tasks you start.
+- Suspend without blocking the reactor with `FunApi.sleep(seconds)`.
+- Reach the raw task with `Async::Task.current` when you need `with_timeout`, `annotate`, or `yield`.
 - Request-scoped state belongs in fiber-local storage (`Fiber[:key]`), not `Thread.current[:key]`.
 - Dependency cleanup runs in `ensure` even when validation or the handler fails.
 - Background tasks are executed after the response payload is built and before the request finishes.
@@ -21,15 +22,17 @@ FunApi's request lifecycle guarantees:
 ```ruby
 require "async/semaphore"
 
-api.get "/dashboard" do |input, req, task|
-  user = task.async { fetch_user }
-  posts = task.async { fetch_posts }
+api.get "/dashboard" do |input, req|
+  user = FunApi.async { fetch_user }
+  posts = FunApi.async { fetch_posts }
 
   [{user: user.wait, posts: posts.wait}, 200]
 end
 ```
 
 FunApi intentionally builds on Socketry's structured-concurrency model. Don't introduce raw thread-based concurrency into request handlers.
+
+> The old three-argument form `|input, req, task|` still works during the deprecation window, but new code should use `FunApi.async` / `FunApi.sleep`.
 
 ## Understanding Fibers
 
@@ -41,11 +44,11 @@ FunApi uses **cooperative multitasking** via fibers. Key points:
 - Context switches are explicit and predictable
 
 ```ruby
-api.get '/example' do |input, req, task|
+api.get "/example" do |input, req|
   # This fiber runs until...
   data = fetch_from_api  # ...it hits I/O (yields to other fibers)
   process(data)          # continues after I/O completes
-  [{ result: data }, 200]
+  [{result: data}, 200]
 end
 ```
 
@@ -55,13 +58,13 @@ end
 
 ```ruby
 # DANGEROUS: Could spawn thousands of tasks
-api.post '/process-all' do |input, req, task|
+api.post "/process-all" do |input, req|
   items = input[:body][:items]  # Could be 10,000 items!
-  
+
   items.each do |item|
-    task.async { process(item) }  # Unbounded!
+    FunApi.async { process(item) }  # Unbounded!
   end
-  
+
   [{ok: true}, 200]
 end
 ```
@@ -77,15 +80,15 @@ This can overwhelm:
 ```ruby
 require "async/semaphore"
 
-api.post '/process-all' do |input, req, task|
+api.post "/process-all" do |input, req|
   items = input[:body][:items]
   semaphore = Async::Semaphore.new(10)  # Max 10 concurrent
-  
+
   results = items.map do |item|
     semaphore.async { process(item) }
   end.map(&:wait)
-  
-  [{ results: results }, 200]
+
+  [{results: results}, 200]
 end
 ```
 
@@ -100,39 +103,35 @@ end
 
 ## Use Timeouts
 
-Every external call should have a timeout:
+Every external call should have a timeout. Reach the current task for `with_timeout`:
 
 ```ruby
-api.get '/external' do |input, req, task|
+api.get "/external" do |input, req|
+  task = Async::Task.current
+
   # Overall request timeout
   task.with_timeout(30) do
     # Individual operation timeout
     data = task.with_timeout(5) do
       fetch_from_slow_service
     end
-    
-    [{ data: data }, 200]
+
+    [{data: data}, 200]
   end
 rescue Async::TimeoutError
-  raise FunApi::HTTPException.new(
-    status_code: 504,
-    detail: "Request timeout"
-  )
+  raise FunApi::HTTPException.new(status_code: 504, detail: "Request timeout")
 end
 ```
 
 ### Timeout Hierarchy
 
 ```ruby
+task = Async::Task.current
+
 task.with_timeout(30) do  # Overall: 30s
-  a = task.async do
-    task.with_timeout(10) { fetch_a }  # Individual: 10s
-  end
-  
-  b = task.async do
-    task.with_timeout(10) { fetch_b }  # Individual: 10s
-  end
-  
+  a = FunApi.async { task.with_timeout(10) { fetch_a } }  # Individual: 10s
+  b = FunApi.async { task.with_timeout(10) { fetch_b } }  # Individual: 10s
+
   [a.wait, b.wait]
 end
 ```
@@ -143,9 +142,9 @@ end
 
 | Fiber-Safe | Blocking (Avoid) |
 |-----------|------------------|
-| `sleep(n)` in async context | C extensions without GVL release |
+| `FunApi.sleep(n)` | C extensions without GVL release |
 | `Async::HTTP` | `Net::HTTP` without async wrapper |
-| `db-postgres`, `async-mysql` | Blocking database drivers |
+| Sequel + `pg` (>= 1.3, fiber-scheduler-aware) | Blocking database drivers |
 | `Async::IO` file operations | Heavy CPU computation |
 
 ### Detecting Blocking Code
@@ -154,11 +153,11 @@ If a request "freezes" other requests, you likely have blocking code:
 
 ```ruby
 # This blocks ALL requests on the worker
-api.get '/block' do |input, req, task|
+api.get "/block" do |input, req|
   # CPU-intensive - no yield points
   (1..1_000_000).reduce(:+)
-  
-  [{result: 'done'}, 200]
+
+  [{result: "done"}, 200]
 end
 ```
 
@@ -170,14 +169,15 @@ end
 
 ```ruby
 # Option 3: Chunked with yields
-api.get '/compute' do |input, req, task|
+api.get "/compute" do |input, req|
+  task = Async::Task.current
   result = 0
   (1..1_000_000).each_slice(10_000) do |chunk|
     result += chunk.reduce(:+)
     task.yield  # Let other fibers run
   end
-  
-  [{ result: result }, 200]
+
+  [{result: result}, 200]
 end
 ```
 
@@ -204,23 +204,25 @@ FunApi sets `Fiber[:async_task]` while handling a request and clears it afterwar
 
 ### Database Connections
 
-Always use connection pools sized for your concurrency:
+Always use connection pools sized for your concurrency. FunApi blesses Sequel with a fibered pool — see the [Database](/patterns/database) guide:
 
 ```ruby
-# Sequel with connection pool
+require "funapi/sequel"
 require "async/semaphore"
 
-DB = Sequel.connect(
-  'postgres://...',
+DB = FunApi::Sequel.connect(
+  "postgres://...",
   max_connections: 10  # Match your semaphore limits
 )
 
-api.post '/batch' do |input, req, task|
+api.post "/batch" do |input, req|
   semaphore = Async::Semaphore.new(10)  # Same as pool size
-  
-  items.map do |item|
+
+  input[:body][:items].map do |item|
     semaphore.async { DB[:items].insert(item) }
   end.map(&:wait)
+
+  [{ok: true}, 200]
 end
 ```
 
@@ -229,12 +231,12 @@ end
 ```ruby
 # Create client once, reuse
 HTTP_CLIENT = Async::HTTP::Client.new(
-  Async::HTTP::Endpoint.parse('https://api.example.com')
+  Async::HTTP::Endpoint.parse("https://api.example.com")
 )
 
-api.get '/fetch' do |input, req, task|
-  response = HTTP_CLIENT.get('/data')
-  [{ data: response.read }, 200]
+api.get "/fetch" do |input, req|
+  response = HTTP_CLIENT.get("/data")
+  [{data: response.read}, 200]
 end
 ```
 
@@ -249,7 +251,7 @@ begin
   barrier.async { might_fail_1 }
   barrier.async { might_fail_2 }
   barrier.wait
-rescue => e
+rescue
   barrier.stop  # Cancel remaining tasks
   raise
 end
@@ -265,29 +267,30 @@ items.each do |item|
   semaphore.async do
     results << process(item)
   rescue => e
-    errors << { item: item, error: e.message }
+    errors << {item: item, error: e.message}
   end
 end
 
 semaphore.wait
 
 if errors.any?
-  [{ partial_results: results, errors: errors }, 207]
+  [{partial_results: results, errors: errors}, 207]
 else
-  [{ results: results }, 200]
+  [{results: results}, 200]
 end
 ```
 
 ### Graceful Degradation
 
 ```ruby
-api.get '/dashboard' do |input, req, task|
+api.get "/dashboard" do |input, req|
+  task = Async::Task.current
   core_data = fetch_core_data  # Required
-  
+
   # Optional enrichment - don't fail if these timeout
   extras = {}
-  
-  task.async do
+
+  FunApi.async do
     task.with_timeout(2) do
       extras[:recommendations] = fetch_recommendations
     end
@@ -295,7 +298,7 @@ api.get '/dashboard' do |input, req, task|
     extras[:recommendations] = []
   end.wait
 
-  [{ data: core_data, **extras }, 200]
+  [{data: core_data, **extras}, 200]
 end
 ```
 
@@ -305,12 +308,12 @@ end
 
 ```ruby
 # DANGEROUS: Can corrupt state
-Timeout.timeout(5) do  
+Timeout.timeout(5) do
   database_operation  # Might be interrupted mid-transaction!
 end
 
 # SAFE: Use async timeouts
-task.with_timeout(5) do
+Async::Task.current.with_timeout(5) do
   database_operation  # Yields cleanly at I/O points
 end
 ```
@@ -321,16 +324,16 @@ end
 # WRONG: Shared mutable state
 @cache = {}
 
-api.get '/cached/:key' do |input, req, task|
+api.get "/cached/:key" do |input, req|
   key = input[:path][:key]
   @cache[key] ||= expensive_fetch(key)  # Race condition!
 end
 
 # BETTER: Use Concurrent::Map or per-request state
-require 'concurrent'
+require "concurrent"
 @cache = Concurrent::Map.new
 
-api.get '/cached/:key' do |input, req, task|
+api.get "/cached/:key" do |input, req|
   key = input[:path][:key]
   @cache.compute_if_absent(key) { expensive_fetch(key) }
 end
@@ -340,13 +343,13 @@ end
 
 ```ruby
 # WRONG: Fire-and-forget orphan tasks
-api.post '/fire' do |input, req, task|
-  task.async { send_email }  # Never waited!
+api.post "/fire" do |input, req|
+  FunApi.async { send_email }  # Never waited!
   [{ok: true}, 200]
 end
 
 # CORRECT: Use background tasks
-api.post '/fire' do |input, req, task, background:|
+api.post "/fire" do |input, req, background:|
   background.add_task(-> { send_email })
   [{ok: true}, 200]
 end
@@ -359,7 +362,7 @@ end
 ```ruby
 # SLOW: N+1 queries
 users.map do |user|
-  task.async { User.find(user.id) }
+  FunApi.async { User.find(user.id) }
 end
 
 # FAST: Single query
@@ -370,17 +373,17 @@ User.where(id: users.map(&:id))
 
 ```ruby
 # SLOW: New connection per request
-api.get '/data' do |input, req, task|
+api.get "/data" do |input, req|
   client = Async::HTTP::Client.new(endpoint)
-  client.get('/path')
+  client.get("/path")
   client.close
 end
 
 # FAST: Shared client
 CLIENT = Async::HTTP::Client.new(endpoint)
 
-api.get '/data' do |input, req, task|
-  CLIENT.get('/path')
+api.get "/data" do |input, req|
+  CLIENT.get("/path")
 end
 ```
 
@@ -389,13 +392,15 @@ end
 Use `Async::Task#annotate` for debugging:
 
 ```ruby
-api.get '/slow' do |input, req, task|
+api.get "/slow" do |input, req|
+  task = Async::Task.current
+
   task.annotate "Fetching user data"
   user = fetch_user
-  
+
   task.annotate "Processing results"
   result = process(user)
-  
+
   [result, 200]
 end
 ```
@@ -405,7 +410,7 @@ end
 | Do | Don't |
 |----|-------|
 | Use `Async::Semaphore` for bounded concurrency | Spawn unlimited tasks |
-| Use `task.with_timeout` | Use `Timeout.timeout` |
+| Use `Async::Task.current.with_timeout` | Use `Timeout.timeout` |
 | Use `Fiber[:key]` for request state | Use `Thread.current[:key]` |
 | Use connection pools | Create connections per request |
 | Wait for all spawned tasks | Fire-and-forget tasks |
@@ -413,6 +418,8 @@ end
 
 ## Further Reading
 
+- [Streaming, SSE & WebSockets](/patterns/streaming)
 - [Async Gem Documentation](https://socketry.github.io/async/)
 - [Falcon Server](https://socketry.github.io/falcon/)
 - [Async Best Practices](https://socketry.github.io/async/guides/best-practices/)
+</content>

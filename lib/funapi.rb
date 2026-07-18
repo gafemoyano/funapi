@@ -8,8 +8,22 @@ require_relative "funapi/depends"
 require_relative "funapi/dependency_wrapper"
 require_relative "funapi/router"
 require_relative "funapi/route_set"
+require_relative "funapi/streaming_response"
+require_relative "funapi/sse"
 require_relative "funapi/application"
 
 module FunApi
   class Error < StandardError; end
+
+  def self.async(&block)
+    current_task.async(&block)
+  end
+
+  def self.sleep(duration)
+    ::Kernel.sleep(duration)
+  end
+
+  def self.current_task
+    Fiber[:async_task] || Async::Task.current
+  end
 end

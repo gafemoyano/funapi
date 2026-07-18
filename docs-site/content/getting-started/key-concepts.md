@@ -22,24 +22,25 @@ end
 
 ## Route Handlers
 
-Route handlers are blocks that receive three arguments:
+Route handlers are blocks that receive two arguments:
 
 ```ruby
-api.get '/path' do |input, req, task|
+api.get '/path' do |input, req|
   # input - Hash with :path, :query, :body
   # req   - Rack::Request object
-  # task  - Async::Task for concurrent operations
   
   [response_data, status_code]
 end
 ```
+
+For concurrency, use `FunApi.async { ... }` and `FunApi.sleep(n)`.
 
 ### The Input Hash
 
 All request data is normalized into a single `input` hash:
 
 ```ruby
-api.post '/users/:id' do |input, req, task|
+api.post '/users/:id' do |input, req|
   input[:path]     # => { id: '123' }
   input[:query]    # => { limit: 10, offset: 0 }
   input[:body]     # => { name: 'Alice', ... }
@@ -86,16 +87,17 @@ See [Validation](/essential/validation) for the full field reference.
 > The older `FunApi::Schema.define` DSL (a thin wrapper over dry-schema) still
 > works everywhere a model is accepted, but `FunApi::Model` is preferred.
 
-## Async Task
+## Concurrency
 
-The `task` parameter is an `Async::Task` from Ruby's Async library. Use it for concurrent operations:
+Use `FunApi.async { ... }` for concurrent operations (backed by Ruby's Async
+library), and `FunApi.sleep(n)` for non-blocking sleeps:
 
 ```ruby
-api.get '/dashboard' do |input, req, task|
+api.get '/dashboard' do |input, req|
   # These run concurrently
-  user_task = task.async { fetch_user }
-  posts_task = task.async { fetch_posts }
-  stats_task = task.async { fetch_stats }
+  user_task = FunApi.async { fetch_user }
+  posts_task = FunApi.async { fetch_posts }
+  stats_task = FunApi.async { fetch_stats }
 
   # Wait for all to complete
   [{

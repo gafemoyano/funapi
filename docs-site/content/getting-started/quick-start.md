@@ -32,11 +32,11 @@ app = FunApi::App.new(
   title: "My First API",
   version: "1.0.0"
 ) do |api|
-  api.get '/hello' do |input, req, task|
+  api.get '/hello' do |input, req|
     [{ message: 'Hello, World!' }, 200]
   end
 
-  api.get '/hello/:name' do |input, req, task|
+  api.get '/hello/:name' do |input, req|
     name = input[:path][:name]
     [{ message: "Hello, #{name}!" }, 200]
   end
@@ -90,11 +90,11 @@ UserSchema = FunApi::Schema.define do
 end
 
 app = FunApi::App.new(title: "My API") do |api|
-  api.get '/hello' do |input, req, task|
+  api.get '/hello' do |input, req|
     [{ message: 'Hello, World!' }, 200]
   end
 
-  api.post '/users', body: UserSchema do |input, req, task|
+  api.post '/users', body: UserSchema do |input, req|
     user = input[:body]
     # user is already validated!
     [{ created: user }, 201]

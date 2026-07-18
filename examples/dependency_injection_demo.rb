@@ -101,7 +101,7 @@ app = FunApi::App.new(
     logger
   end
 
-  api.get "/" do |_input, _req, _task|
+  api.get "/" do |_input, _req|
     [{
       message: "Dependency Injection Demo API",
       endpoints: {
@@ -121,7 +121,7 @@ app = FunApi::App.new(
     depends: {
       db: nil,
       page: Paginator.new(max_limit: 50)
-    } do |_input, _req, _task, db:, page:|
+    } do |_input, _req, db:, page:|
     users = db.all_users[page[:offset], page[:limit]]
 
     [{
@@ -132,7 +132,7 @@ app = FunApi::App.new(
   end
 
   api.get "/users/:id",
-    depends: [:db] do |input, _req, _task, db:|
+    depends: [:db] do |input, _req, db:|
     user = db.find_user(input[:path][:id])
     raise FunApi::HTTPException.new(status_code: 404, detail: "User not found") unless user
 
@@ -143,7 +143,7 @@ app = FunApi::App.new(
     depends: {
       user: get_current_user,
       db: nil
-    } do |_input, _req, _task, user:, db:|
+    } do |_input, _req, user:, db:|
     [user, 200]
   end
 
@@ -153,7 +153,7 @@ app = FunApi::App.new(
       admin: require_admin,
       db: nil,
       logger: nil
-    } do |input, _req, _task, admin:, db:, logger:|
+    } do |input, _req, admin:, db:, logger:|
     user_data = input[:body]
     user_data[:role] ||= "user"
 
@@ -164,7 +164,7 @@ app = FunApi::App.new(
   end
 
   api.get "/admin",
-    depends: {admin: require_admin} do |_input, _req, _task, admin:|
+    depends: {admin: require_admin} do |_input, _req, admin:|
     [{
       message: "Welcome to admin area",
       admin: admin

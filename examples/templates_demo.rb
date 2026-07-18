@@ -24,13 +24,13 @@ app = FunApi::App.new(
   version: "1.0.0",
   description: "A simple todo app demonstrating FunApi templates with HTMX"
 ) do |api|
-  api.get "/" do |_input, _req, _task|
+  api.get "/" do |_input, _req|
     templates.response("todos/index.html.erb",
       title: "Todo List",
       todos: TODOS)
   end
 
-  api.post "/todos", body: TodoSchema do |input, _req, _task|
+  api.post "/todos", body: TodoSchema do |input, _req|
     new_id = (TODOS.map { |t| t[:id] }.max || 0) + 1
     todo = {
       id: new_id,
@@ -45,7 +45,7 @@ app = FunApi::App.new(
       status: 201)
   end
 
-  api.patch "/todos/:id/toggle" do |input, _req, _task|
+  api.patch "/todos/:id/toggle" do |input, _req|
     todo_id = input[:path][:id].to_i
     todo = TODOS.find { |t| t[:id] == todo_id }
 
@@ -60,14 +60,14 @@ app = FunApi::App.new(
       todo: todo)
   end
 
-  api.delete "/todos/:id" do |input, _req, _task|
+  api.delete "/todos/:id" do |input, _req|
     todo_id = input[:path][:id].to_i
     TODOS.reject! { |t| t[:id] == todo_id }
 
     FunApi::TemplateResponse.new("")
   end
 
-  api.get "/api/todos" do |_input, _req, _task|
+  api.get "/api/todos" do |_input, _req|
     [TODOS, 200]
   end
 end

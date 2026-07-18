@@ -18,7 +18,7 @@ class TestMyApi < Minitest::Test
 
   def app
     @app ||= FunApi::App.new do |api|
-      api.get '/hello' do |input, req, task|
+      api.get '/hello' do |input, req|
         [{ message: 'Hello!' }, 200]
       end
     end
@@ -50,7 +50,7 @@ RSpec.describe 'My API' do
 
   let(:app) do
     FunApi::App.new do |api|
-      api.get '/hello' do |input, req, task|
+      api.get '/hello' do |input, req|
         [{ message: 'Hello!' }, 200]
       end
     end
@@ -110,7 +110,7 @@ def app
   @app ||= FunApi::App.new do |api|
     api.register(:db) { MockDatabase.new }
     
-    api.get '/users', depends: [:db] do |input, req, task, db:|
+    api.get '/users', depends: [:db] do |input, req, db:|
       [{ users: db.all_users }, 200]
     end
   end

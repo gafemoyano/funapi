@@ -82,24 +82,27 @@ ruby examples/demo_middleware.rb
 
 ### Route Handlers
 
-All route handlers receive three parameters:
+Route handlers receive two parameters:
 ```ruby
-api.get '/path' do |input, req, task|
-  # input: { path: {...}, query: {...}, body: {...} }
+api.get '/path' do |input, req|
+  # input: { path: {...}, query: {...}, body: {...}, headers: {...} }
   # req: Rack::Request object
-  # task: Async::Task for concurrent operations
 
   [response_data, status_code]
 end
 ```
 
+The old three-argument form `|input, req, task|` still works during the
+deprecation window, but new code should use `FunApi.async` / `FunApi.sleep`.
+
 ### Async Operations
 
-Use the `task` parameter for concurrent operations:
+Use `FunApi.async` for concurrent operations and `FunApi.sleep` to suspend
+without blocking the reactor. Handler code never touches a task object:
 ```ruby
-api.get '/dashboard/:id' do |input, req, task|
-  user_task = task.async { fetch_user(id) }
-  posts_task = task.async { fetch_posts(id) }
+api.get '/dashboard/:id' do |input, req|
+  user_task = FunApi.async { fetch_user(id) }
+  posts_task = FunApi.async { fetch_posts(id) }
 
   data = {
     user: user_task.wait,
@@ -109,6 +112,21 @@ api.get '/dashboard/:id' do |input, req, task|
   [data, 200]
 end
 ```
+
+Reach `Async::Task.current` directly for `with_timeout`, `annotate`, or `yield`.
+
+### Streaming, SSE & WebSockets
+
+Return a `FunApi::StreamingResponse` (callable Rack 3 body) for chunked output,
+`FunApi::SSE.response` for Server-Sent Events (with optional `heartbeat:`), or
+register `api.websocket "/ws/:room"` for WebSockets (via `async-websocket`;
+non-upgrade requests get 426). See `docs-site/content/patterns/streaming.md`.
+
+### Database (Sequel)
+
+`require "funapi/sequel"` and `FunApi::Sequel.connect(url, max_connections: 10)`
+returns a Sequel DB backed by the fibered connection pool. Users add `sequel`
+and a driver (`pg` >= 1.3) to their own Gemfile.
 
 ### Validation Schemas
 
@@ -120,7 +138,7 @@ MySchema = FunApi::Schema.define do
 end
 
 # Apply to routes
-api.post '/users', body: MySchema do |input, req, task|
+api.post '/users', body: MySchema do |input, req|
   user = input[:body]  # Already validated
   [user, 201]
 end
@@ -182,18 +200,18 @@ templates = FunApi::Templates.new(
   layout: 'layouts/application.html.erb'  # optional default layout
 )
 
-api.get '/' do |input, req, task|
+api.get '/' do |input, req|
   templates.response('home.html.erb', title: 'Home', user: current_user)
 end
 
 # Disable layout for HTMX partials
-api.post '/items' do |input, req, task|
+api.post '/items' do |input, req|
   templates.response('_item.html.erb', layout: false, item: item, status: 201)
 end
 
 # Use with_layout for route groups
 admin = templates.with_layout('layouts/admin.html.erb')
-api.get '/admin' do |input, req, task|
+api.get '/admin' do |input, req|
   admin.response('dashboard.html.erb', title: 'Admin')
 end
 ```
@@ -321,7 +339,7 @@ class TestMyFeature < Minitest::Test
 
   def test_something
     app = FunApi::App.new do |api|
-      api.get '/test' do |input, req, task|
+      api.get '/test' do |input, req|
         [{ message: 'test' }, 200]
       end
     end

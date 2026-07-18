@@ -11,7 +11,7 @@ FunApi provides FastAPI-style error responses.
 Raise `HTTPException` to return an error response:
 
 ```ruby
-api.get '/users/:id' do |input, req, task|
+api.get '/users/:id' do |input, req|
   user = find_user(input[:path][:id])
   
   unless user
@@ -110,7 +110,7 @@ app = FunApi::App.new do |api|
     [{ detail: error.message }, 404]
   end
 
-  api.get '/users/:id' do |input, req, task|
+  api.get '/users/:id' do |input, req|
     user = find_user(input[:path][:id])
     raise RecordNotFound, "User not found" unless user
     [{ user: user }, 200]
@@ -150,7 +150,7 @@ running in development (`FUNAPI_ENV` or `RACK_ENV` set to `development`):
 Use standard Ruby exception handling:
 
 ```ruby
-api.get '/external' do |input, req, task|
+api.get '/external' do |input, req|
   begin
     data = ExternalAPI.fetch
     [{ data: data }, 200]
@@ -193,7 +193,7 @@ class UnauthorizedError < FunApi::HTTPException
 end
 
 # Usage
-api.get '/users/:id' do |input, req, task|
+api.get '/users/:id' do |input, req|
   user = find_user(input[:path][:id])
   raise NotFoundError.new('User', input[:path][:id]) unless user
   [{ user: user }, 200]

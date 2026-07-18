@@ -46,7 +46,7 @@ app = FunApi::App.new(
   version: "1.0.0",
   description: "FunApi::Model — validation + serialization + OpenAPI from one declaration"
 ) do |api|
-  api.post "/users", body: UserCreate, response_schema: UserOut do |input, _req, _task|
+  api.post "/users", body: UserCreate, response_schema: UserOut do |input, _req|
     data = input[:body]
 
     record = UserRecord.new(
@@ -64,7 +64,7 @@ app = FunApi::App.new(
     [record, 201]
   end
 
-  api.get "/users/:id", response_schema: UserOut do |input, _req, _task|
+  api.get "/users/:id", response_schema: UserOut do |input, _req|
     record = UserRecord.new(
       id: input[:path][:id].to_i,
       name: "Ada Lovelace",

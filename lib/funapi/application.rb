@@ -14,6 +14,7 @@ require_relative "depends"
 require_relative "dependency_wrapper"
 require_relative "background_tasks"
 require_relative "template_response"
+require_relative "streaming_response"
 require_relative "openapi/spec_generator"
 
 module FunApi
@@ -100,6 +101,22 @@ module FunApi
 
     def delete(route_path, path: nil, query: nil, response_schema: nil, depends: nil, tags: nil, &blk)
       add_route("DELETE", route_path, path: path, query: query, response_schema: response_schema, depends: depends, tags: tags, &blk)
+    end
+
+    def websocket(route_path, path: nil, query: nil, &blk)
+      require_relative "websocket"
+
+      metadata = {
+        path_schema: path,
+        query_schema: query,
+        tags: [],
+        dependencies: {},
+        websocket: true
+      }
+
+      @route_set.add("GET", route_path, metadata: metadata) do |req, path_params|
+        handle_websocket_route(req, path_params, path, query, &blk)
+      end
     end
 
     def include_router(router, prefix: "", depends: {}, tags: [])
@@ -271,7 +288,9 @@ module FunApi
 
         payload, status = blk.call(input, req, current_task, **resolved_deps)
 
-        response = if payload.is_a?(TemplateResponse)
+        response = if payload.is_a?(StreamingResponse)
+          payload.to_response
+        elsif payload.is_a?(TemplateResponse)
           payload.to_response
         else
           payload = normalize_payload(payload)
@@ -296,6 +315,29 @@ module FunApi
         run_cleanup(cleanup_objects) unless deferred
         Fiber[:async_task] = nil
       end
+    end
+
+    def handle_websocket_route(req, path_params, path_schema, query_schema, &blk)
+      Fiber[:async_task] = Async::Task.current
+
+      input = {
+        path: path_params.transform_keys(&:to_sym),
+        query: req.GET,
+        headers: extract_headers(req.env)
+      }
+
+      input[:path] = Schema.validate(path_schema, input[:path], location: "path") if path_schema
+      input[:query] = Schema.validate(query_schema, input[:query], location: "query") if query_schema
+
+      response = FunApi::WebSocket.open(req.env) do |connection|
+        blk.call(connection, input)
+      end
+
+      response || FunApi::WebSocket.upgrade_required
+    rescue => e
+      handle_exception(e, req)
+    ensure
+      Fiber[:async_task] = nil
     end
 
     def schedule_post_response(task, background_tasks, cleanup_objects)

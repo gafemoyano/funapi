@@ -192,7 +192,7 @@ app = FunApi::App.new(title: "My API") do |api|
   # Custom
   api.use Rack::Session::Cookie, secret: 'secret'
   
-  api.get '/hello' do |input, req, task|
+  api.get '/hello' do |input, req|
     [{ message: 'Hello!' }, 200]
   end
 end
