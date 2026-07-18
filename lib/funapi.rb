@@ -5,7 +5,6 @@ require_relative "funapi/exceptions"
 require_relative "funapi/schema"
 require_relative "funapi/depends"
 require_relative "funapi/dependency_wrapper"
-require_relative "funapi/async"
 require_relative "funapi/router"
 require_relative "funapi/application"
 
