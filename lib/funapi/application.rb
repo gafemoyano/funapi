@@ -100,6 +100,25 @@ module FunApi
       end
     end
 
+    def openapi_spec
+      generate_openapi_spec
+    end
+
+    def schemas
+      seen = []
+      @route_set.routes.each do |route|
+        next if route.metadata[:internal]
+
+        %i[path_schema query_schema body_schema response_schema].each do |key|
+          schema = route.metadata[key]
+          next unless schema
+
+          Array(schema).each { |member| seen << member unless seen.include?(member) }
+        end
+      end
+      seen
+    end
+
     def override_dependency(key, replacement)
       @dependency_overrides[key.to_sym] = replacement
       self
@@ -164,7 +183,8 @@ module FunApi
 
     def use(middleware, *args, &block)
       if @middleware_chain
-        raise "Cannot add middleware after the application has started handling requests"
+        raise "Cannot add middleware after the application has started handling requests. " \
+          "Register all middleware (use / add_cors / add_request_logger) inside the FunApi::App.new block, before the first request."
       end
 
       @middleware_stack << [middleware, args, block]
@@ -664,7 +684,8 @@ module FunApi
             {type: :container, key: key.to_sym}
           else
             unless value.respond_to?(:call)
-              raise ArgumentError, "Dependency must be callable, Depends, Symbol, or nil for #{key}"
+              raise ArgumentError,
+                "dependency #{key.inspect} must be callable, a FunApi::Depends, a Symbol naming a registered dependency, or nil; got #{value.class}"
             end
 
             {type: :depends, callable: Depends.new(value)}
@@ -672,7 +693,8 @@ module FunApi
           end
         end
       else
-        raise ArgumentError, "depends must be an Array or Hash"
+        raise ArgumentError,
+          "depends must be an Array of names (e.g. [:db]) or a Hash (e.g. {db: FunApi.Depends(...)}); got #{depends.class}"
       end
 
       normalized
