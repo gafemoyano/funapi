@@ -67,8 +67,18 @@ class DocsRenderer
         ]
       },
       {
+        title: "Tutorial",
+        items: [
+          {path: "tutorial/hello-world", title: "1. Hello World"},
+          {path: "tutorial/validation", title: "2. Validation with Models"},
+          {path: "tutorial/dependencies", title: "3. Dependency Injection"},
+          {path: "tutorial/streaming", title: "4. Streaming with SSE"}
+        ]
+      },
+      {
         title: "Essential",
         items: [
+          {path: "essential/cli", title: "CLI & Dev Server"},
           {path: "essential/routing", title: "Routing"},
           {path: "essential/handler", title: "Handler"},
           {path: "essential/validation", title: "Validation"},
