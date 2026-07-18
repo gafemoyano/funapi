@@ -45,9 +45,11 @@ With async, it takes `max(time(user), time(posts), time(stats))`.
 
 ## Bounded Concurrency with Semaphore
 
-When processing collections, limit concurrent operations to avoid overwhelming external services:
+When processing collections, limit concurrent operations to avoid overwhelming external services. `Async::Semaphore` is not loaded by `require "async"` alone, so require it explicitly:
 
 ```ruby
+require "async/semaphore"
+
 api.post '/batch-process' do |input, req, task|
   items = input[:body][:items]
   
@@ -69,6 +71,8 @@ end
 Use `Async::Barrier` to manage groups of related tasks:
 
 ```ruby
+require "async/barrier"
+
 api.get '/reports/:id' do |input, req, task|
   barrier = Async::Barrier.new
   results = {}
@@ -212,6 +216,8 @@ end
 Use `Async::Queue` for coordinating work between tasks:
 
 ```ruby
+require "async/queue"
+
 api.post '/stream-process' do |input, req, task|
   queue = Async::Queue.new
   results = []

@@ -13,6 +13,74 @@ class TestAsync < Minitest::Test
     JSON.parse(response.body, symbolize_names: true)
   end
 
+  def test_task_is_current_async_task
+    app = FunApi::App.new do |api|
+      api.get "/task" do |_input, _req, task|
+        [{same: task.equal?(Async::Task.current)}, 200]
+      end
+    end
+
+    res = async_request(app, :get, "/task")
+    data = parse(res)
+
+    assert_equal true, data[:same]
+  end
+
+  def test_request_fiber_state_does_not_leak
+    app = FunApi::App.new do |api|
+      api.get "/state/:value" do |input, _req, _task|
+        Fiber[:funapi_test_state] = input[:path]["value"]
+        [{value: Fiber[:funapi_test_state]}, 200]
+      end
+    end
+
+    Fiber[:funapi_test_state] = nil
+
+    results = Async do |task|
+      requests = %w[a b c].map do |value|
+        task.async { Rack::MockRequest.new(app).get("/state/#{value}") }
+      end
+
+      requests.map(&:wait)
+    end.wait
+
+    assert_equal %w[a b c], results.map { |res| JSON.parse(res.body)["value"] }
+    assert_nil Fiber[:funapi_test_state]
+  ensure
+    Fiber[:funapi_test_state] = nil
+  end
+
+  def test_async_semaphore_bounds_concurrency
+    require "async/semaphore"
+
+    running = 0
+    max_running = 0
+
+    app = FunApi::App.new do |api|
+      api.get "/bounded" do |_input, _req, task|
+        semaphore = Async::Semaphore.new(2, parent: task)
+
+        5.times.map do
+          semaphore.async do
+            running += 1
+            max_running = running if running > max_running
+            sleep 0.01
+            true
+          ensure
+            running -= 1
+          end
+        end.map(&:wait)
+
+        [{max_running: max_running}, 200]
+      end
+    end
+
+    res = async_request(app, :get, "/bounded")
+    data = parse(res)
+
+    assert_equal 2, data[:max_running]
+  end
+
   def test_concurrent_tasks
     app = FunApi::App.new do |api|
       api.get "/concurrent" do |_input, _req, task|

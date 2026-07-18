@@ -6,6 +6,31 @@ title: Best Practices
 
 FunApi runs on Falcon, an async HTTP server using Ruby's fiber-based concurrency. This guide covers patterns to write safe, performant async code.
 
+## Async Contract
+
+FunApi's request lifecycle guarantees:
+
+- The third route-handler argument is the current `Async::Task`.
+- Spawn child work with `task.async` and wait for the child tasks you start.
+- Use `task.with_timeout` for cooperative cancellation at async yield points.
+- Request-scoped state belongs in fiber-local storage (`Fiber[:key]`), not `Thread.current[:key]`.
+- Dependency cleanup runs in `ensure` even when validation or the handler fails.
+- Background tasks are executed after the response payload is built and before the request finishes.
+- FunApi code should require the async primitive it documents, for example `require "async/semaphore"`.
+
+```ruby
+require "async/semaphore"
+
+api.get "/dashboard" do |input, req, task|
+  user = task.async { fetch_user }
+  posts = task.async { fetch_posts }
+
+  [{user: user.wait, posts: posts.wait}, 200]
+end
+```
+
+FunApi intentionally builds on Socketry's structured-concurrency model. Don't introduce raw thread-based concurrency into request handlers.
+
 ## Understanding Fibers
 
 FunApi uses **cooperative multitasking** via fibers. Key points:
@@ -50,6 +75,8 @@ This can overwhelm:
 ### Solution: Use Semaphore
 
 ```ruby
+require "async/semaphore"
+
 api.post '/process-all' do |input, req, task|
   items = input[:body][:items]
   semaphore = Async::Semaphore.new(10)  # Max 10 concurrent
@@ -163,18 +190,15 @@ Use `Fiber[:key]` for request-scoped data:
 Fiber[:current_user] = user
 Fiber[:request_id] = SecureRandom.uuid
 
-# WRONG: Thread-local (shared across requests!)
-Thread.current[:user] = user  # Multiple fibers share threads!
+# WRONG: Not a reliable request context API
+Thread.current[:user] = user
 ```
 
-### Why Thread.current is Dangerous
+### Why Fiber Locals Are the Right Model
 
-```
-Thread 1
-├── Fiber A (Request 1): Thread.current[:user] = "alice"
-├── Fiber B (Request 2): Thread.current[:user] = "bob"    # Overwrites!
-└── Fiber A continues:   Thread.current[:user] == "bob"   # Wrong user!
-```
+In Ruby 3.x, `Thread.current[]` is fiber-local too, but `Fiber[]` is the clearer API for request-scoped async state. It makes the model explicit and avoids confusion with thread-local storage from threaded servers.
+
+FunApi sets `Fiber[:async_task]` while handling a request and clears it afterward. Application code should follow the same pattern for request state.
 
 ## Connection Pools
 
@@ -184,6 +208,8 @@ Always use connection pools sized for your concurrency:
 
 ```ruby
 # Sequel with connection pool
+require "async/semaphore"
+
 DB = Sequel.connect(
   'postgres://...',
   max_connections: 10  # Match your semaphore limits
