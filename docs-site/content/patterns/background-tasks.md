@@ -11,7 +11,7 @@ Execute tasks after the response is sent to the client.
 Request the `background:` parameter in your handler:
 
 ```ruby
-api.post '/signup', body: UserSchema do |input, req, task, background:|
+api.post '/signup', body: UserSchema do |input, req, background:|
   user = create_user(input[:body])
   
   # These run AFTER the response is sent
@@ -22,7 +22,9 @@ api.post '/signup', body: UserSchema do |input, req, task, background:|
 end
 ```
 
-The client receives the response immediately. The tasks execute afterward.
+The client receives the response immediately. The tasks execute afterward, in
+the order they were added, and before request-scoped dependencies are cleaned
+up — so any dependencies captured in a task's closure are still usable.
 
 ## Adding Tasks
 
@@ -60,7 +62,7 @@ Dependencies are available to background tasks:
 api.register(:mailer) { Mailer.new }
 api.register(:analytics) { Analytics.new }
 
-api.post '/signup', depends: [:mailer, :analytics] do |input, req, task, mailer:, analytics:, background:|
+api.post '/signup', depends: [:mailer, :analytics] do |input, req, mailer:, analytics:, background:|
   user = create_user(input[:body])
   
   # Dependencies captured in closure
@@ -128,7 +130,7 @@ app = FunApi::App.new do |api|
     required(:email).filled(:string)
   end
 
-  api.post '/signup', body: UserSchema do |input, req, task, background:|
+  api.post '/signup', body: UserSchema do |input, req, background:|
     user = { id: rand(1000), **input[:body] }
     
     background.add_task(method(:send_welcome_email), user[:email])

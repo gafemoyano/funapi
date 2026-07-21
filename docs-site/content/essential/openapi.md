@@ -38,11 +38,11 @@ This appears in the OpenAPI spec and Swagger UI header.
 All routes are automatically included:
 
 ```ruby
-api.get '/users' do |input, req, task|
+api.get '/users' do |input, req|
   # Documented as GET /users
 end
 
-api.post '/users' do |input, req, task|
+api.post '/users' do |input, req|
   # Documented as POST /users
 end
 ```
@@ -52,35 +52,68 @@ end
 Path parameters are extracted and documented:
 
 ```ruby
-api.get '/users/:id' do |input, req, task|
+api.get '/users/:id' do |input, req|
   # Documented with {id} parameter
 end
 ```
 
 ### Schemas
 
-Schemas become OpenAPI components:
+Models become OpenAPI components:
 
 ```ruby
-UserSchema = FunApi::Schema.define do
-  required(:name).filled(:string)
-  required(:email).filled(:string)
+class UserCreate < FunApi::Model
+  field :name,  :string
+  field :email, :string, format: "email"
 end
 
-api.post '/users', body: UserSchema do |input, req, task|
-  # Request body documented with UserSchema
+api.post '/users', body: UserCreate do |input, req|
+  # Request body documented with the UserCreate schema
 end
 ```
+
+Field metadata flows straight into the schema — `description:`, `format:`,
+`enum:`, `min:`/`max:`, `pattern:`, `nullable:`, and nested models all appear in
+the generated component. `FunApi::Schema.define` schemas are documented too
+(legacy path).
 
 ### Response Schemas
 
 Response schemas document the output:
 
 ```ruby
-api.get '/users/:id', response_schema: UserOutputSchema do |input, req, task|
+api.get '/users/:id', response_schema: UserOutputSchema do |input, req|
   # Response documented with UserOutputSchema
 end
 ```
+
+### Tags
+
+Tags group related operations in Swagger UI. Pass `tags:` on a route, or — more
+commonly — on a [router](/essential/routing) so every endpoint it contributes is
+grouped together:
+
+```ruby
+UsersRouter = FunApi::Router.new(prefix: '/users', tags: ['users']) do |r|
+  r.get '/' do |input, req|
+    # Documented under the "users" tag
+    [[], 200]
+  end
+end
+
+api.include_router(UsersRouter)
+```
+
+Router tags and inclusion-site tags accumulate, and a route can add its own:
+
+```ruby
+r.get '/audit', tags: ['admin'] do |input, req|
+  # Tagged with both the router's tags and "admin"
+end
+```
+
+Each operation's `tags` array is emitted in the spec, and Swagger UI renders one
+collapsible section per tag.
 
 ## Swagger UI
 
@@ -119,15 +152,20 @@ Access the raw spec at `/openapi.json`:
 
 ## Schema Names
 
-Schema names in OpenAPI come from your Ruby constant names:
+A model's component name is its class name (demodulized):
 
 ```ruby
-UserCreateSchema = FunApi::Schema.define { ... }
-# Becomes "UserCreateSchema" in OpenAPI
+class UserCreate < FunApi::Model; end
+# Becomes "UserCreate" in OpenAPI
 
-UserOutputSchema = FunApi::Schema.define { ... }
-# Becomes "UserOutputSchema" in OpenAPI
+module Api
+  class UserOut < FunApi::Model; end
+end
+# Becomes "UserOut" in OpenAPI
 ```
+
+Legacy `FunApi::Schema.define` schemas are named after the Ruby constant they
+are assigned to (e.g. `UserOutputSchema`).
 
 ## Use Cases
 

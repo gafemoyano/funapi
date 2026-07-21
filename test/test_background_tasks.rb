@@ -26,6 +26,26 @@ class TestBackgroundTasks < Minitest::Test
     assert_equal 200, res.status
   end
 
+  def test_response_returns_before_background_tasks_run
+    order = []
+
+    app = FunApi::App.new do |api|
+      api.post "/test" do |_input, _req, _task, background:|
+        background.add_task(-> { order << :background })
+        [{ok: true}, 200]
+      end
+    end
+
+    res = nil
+    Async do
+      res = Rack::MockRequest.new(app).post("/test")
+      order << :response_received
+    end.wait
+
+    assert_equal %i[response_received background], order
+    assert_equal 200, res.status
+  end
+
   def test_multiple_background_tasks_execute_in_order
     execution_order = []
 
@@ -316,6 +336,55 @@ class TestBackgroundTasks < Minitest::Test
 
     assert_equal 42, result
     assert_equal 200, res.status
+  end
+
+  def test_background_tasks_wait_for_their_own_tasks
+    order = []
+
+    app = FunApi::App.new do |api|
+      api.post "/test" do |_input, _req, task, background:|
+        task.async do
+          sleep 0.03
+          order << :unrelated_child
+        end
+
+        background.add_task(-> { order << :background })
+        [{ok: true}, 200]
+      end
+    end
+
+    res = async_request(app, :post, "/test")
+
+    assert_equal 200, res.status
+    assert_equal %i[background unrelated_child], order
+  end
+
+  def test_background_task_error_still_allows_cleanup
+    order = []
+
+    app = FunApi::App.new do |api|
+      api.register(:resource) do
+        ["resource", -> { order << :cleanup }]
+      end
+
+      api.post "/test", depends: [:resource] do |_input, _req, _task, resource:, background:|
+        background.add_task(-> { raise "background failed" })
+        background.add_task(-> { order << :later_background })
+        [{ok: true}, 200]
+      end
+    end
+
+    original_stderr = $stderr
+    $stderr = StringIO.new
+
+    begin
+      res = async_request(app, :post, "/test")
+      assert_equal 200, res.status
+    ensure
+      $stderr = original_stderr
+    end
+
+    assert_equal %i[later_background cleanup], order
   end
 
   def test_add_task_returns_nil

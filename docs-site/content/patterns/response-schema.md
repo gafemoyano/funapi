@@ -4,156 +4,144 @@ title: Response Schema
 
 # Response Schema
 
-Filter and validate response data before sending to clients.
+Filter and validate response data before sending it to clients.
 
 ## Why Response Schemas?
 
-Response schemas help you:
+A `response_schema:` helps you:
 
-1. **Filter sensitive data** - Remove passwords, tokens, internal IDs
-2. **Validate output** - Catch bugs before they reach clients
-3. **Document responses** - Auto-generate OpenAPI response schemas
+1. **Filter sensitive data** — remove passwords, tokens, internal fields
+2. **Validate output** — catch bugs before they reach clients
+3. **Document responses** — auto-generate OpenAPI response schemas
 
 ## Basic Usage
 
-Define a schema for the response:
+Use a `FunApi::Model` as the response schema. Because a model can `dump` any
+object that responds to its field names, you can hand it your ORM record
+directly — only declared fields survive.
 
 ```ruby
-UserOutputSchema = FunApi::Schema.define do
-  required(:id).filled(:integer)
-  required(:name).filled(:string)
-  required(:email).filled(:string)
+class UserOut < FunApi::Model
+  field :id,    :integer
+  field :name,  :string
+  field :email, :string
 end
 
-api.get '/users/:id', response_schema: UserOutputSchema do |input, req, task|
-  user = find_user(input[:path]['id'])
-  # Even if user has :password, :api_key, etc., they're filtered out
+api.get "/users/:id", response_schema: UserOut do |input, req|
+  user = find_user(input[:path][:id])   # a Sequel::Model, Struct, Hash, …
+  # password, api_key, internal_notes, etc. are filtered out
   [user, 200]
 end
 ```
 
-## Filtering Sensitive Data
+The client receives only the declared fields:
+
+```json
+{ "id": 1, "name": "Alice", "email": "alice@example.com" }
+```
+
+## Serializing Objects
+
+`Model.dump` reads a `Hash` **or any object responding to the field names**, so a
+database record needs no manual mapping:
 
 ```ruby
-# Internal user record
-user = {
-  id: 1,
-  name: "Alice",
-  email: "alice@example.com",
-  password_hash: "abc123...",
-  api_key: "secret...",
-  internal_notes: "VIP customer"
-}
+Record = Struct.new(:id, :name, :email, :password_hash)
 
-# With response_schema: UserOutputSchema
-# Client receives only:
-{
-  "id": 1,
-  "name": "Alice",
-  "email": "alice@example.com"
-}
+api.get "/me", response_schema: UserOut do |input, req|
+  [Record.new(1, "Alice", "alice@example.com", "secret"), 200]
+end
+# password_hash is never in the response
 ```
 
 ## Array Responses
 
-For array responses, wrap the schema in brackets:
+Wrap the model in brackets:
 
 ```ruby
-api.get '/users', response_schema: [UserOutputSchema] do |input, req, task|
-  users = fetch_all_users
-  [users, 200]
+api.get "/users", response_schema: [UserOut] do |input, req|
+  [fetch_all_users, 200]
 end
 ```
 
-## Different Input/Output Schemas
+## Different Input / Output Models
 
-Common pattern: accept more fields than you return.
+A common pattern: accept more fields than you return.
 
 ```ruby
-UserCreateSchema = FunApi::Schema.define do
-  required(:name).filled(:string)
-  required(:email).filled(:string)
-  required(:password).filled(:string)
+class UserCreate < FunApi::Model
+  field :name,     :string
+  field :email,    :string, format: "email"
+  field :password, :string, min: 8
 end
 
-UserOutputSchema = FunApi::Schema.define do
-  required(:id).filled(:integer)
-  required(:name).filled(:string)
-  required(:email).filled(:string)
-  required(:created_at).filled(:string)
+class UserOut < FunApi::Model
+  field :id,    :integer
+  field :name,  :string
+  field :email, :string
 end
 
-api.post '/users', 
-  body: UserCreateSchema, 
-  response_schema: UserOutputSchema do |input, req, task|
-  
-  user = create_user(input[:body])
-  # password is filtered out of response
+api.post "/users", body: UserCreate, response_schema: UserOut do |input, req|
+  user = create_user(input[:body])   # password is filtered out of the response
   [user, 201]
 end
 ```
 
 ## Nested Objects
 
+Nested models are dumped and filtered recursively:
+
 ```ruby
-AddressSchema = FunApi::Schema.define do
-  required(:city).filled(:string)
-  required(:country).filled(:string)
+class Address < FunApi::Model
+  field :city,    :string
+  field :country, :string
 end
 
-UserWithAddressSchema = FunApi::Schema.define do
-  required(:id).filled(:integer)
-  required(:name).filled(:string)
-  required(:address).hash do
-    required(:city).filled(:string)
-    required(:country).filled(:string)
-  end
+class UserWithAddress < FunApi::Model
+  field :id,      :integer
+  field :name,    :string
+  field :address, Address
 end
 
-api.get '/users/:id', response_schema: UserWithAddressSchema do |input, req, task|
-  user = find_user_with_address(input[:path]['id'])
-  [user, 200]
+api.get "/users/:id", response_schema: UserWithAddress do |input, req|
+  [find_user_with_address(input[:path][:id]), 200]
 end
 ```
 
 ## Validation Errors
 
-If your response doesn't match the schema, FunApi returns a 500 error:
+If the dumped response doesn't satisfy the model, FunApi returns a `500`:
 
 ```ruby
-api.get '/broken', response_schema: UserOutputSchema do |input, req, task|
-  # Missing required :email field
-  [{ id: 1, name: "Alice" }, 200]
+api.get "/broken", response_schema: UserOut do |input, req|
+  [{id: 1, name: "Alice"}, 200]   # missing required :email
 end
 
 # Response: 500
-# {"detail":"Response validation failed: {:email=>[\"is missing\"]}"}
+# {"detail":"Response validation failed: {email: [\"is missing\"]}"}
 ```
 
-This helps catch bugs in development before they reach production.
+This catches serialization bugs in development before they reach production.
 
 ## OpenAPI Integration
 
-Response schemas appear in your OpenAPI documentation:
+Response models appear in your OpenAPI document, named after the model class
+(demodulized), and referenced from the operation:
 
 ```json
 {
-  "paths": {
-    "/users/{id}": {
-      "get": {
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserOutputSchema"
-                }
-              }
-            }
-          }
+  "responses": {
+    "200": {
+      "content": {
+        "application/json": {
+          "schema": { "$ref": "#/components/schemas/UserOut" }
         }
       }
     }
   }
 }
 ```
+
+> **Legacy:** `FunApi::Schema.define` schemas still work as `response_schema:`
+> values (they validate and filter, but cannot serialize plain objects). Prefer
+> `FunApi::Model` for new code.

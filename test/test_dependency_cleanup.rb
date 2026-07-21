@@ -198,6 +198,29 @@ class TestDependencyCleanup < Minitest::Test
     assert connections.first[:open] == false, "Connection should be closed"
   end
 
+  def test_cleanup_called_on_unhandled_error
+    cleanup_called = false
+
+    app = FunApi::App.new do |api|
+      api.register(:resource) do
+        [
+          "my_resource",
+          -> { cleanup_called = true }
+        ]
+      end
+
+      api.get "/test", depends: [:resource] do |_input, _req, _task, resource:|
+        raise StandardError, "boom"
+      end
+    end
+
+    res = async_request(app, :get, "/test")
+
+    assert_equal 500, res.status
+    assert_equal "Internal Server Error", JSON.parse(res.body)["detail"]
+    assert cleanup_called, "Cleanup should be called even when handler raises an unhandled exception"
+  end
+
   def test_nested_dependency_cleanups
     outer_cleanup_called = false
     inner_cleanup_called = false

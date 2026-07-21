@@ -6,13 +6,15 @@ require "async/http/endpoint"
 require "protocol/rack"
 require "dry-container"
 require_relative "router"
-require_relative "async"
+require_relative "route_set"
 require_relative "exceptions"
 require_relative "schema"
+require_relative "model"
 require_relative "depends"
 require_relative "dependency_wrapper"
 require_relative "background_tasks"
 require_relative "template_response"
+require_relative "streaming_response"
 require_relative "openapi/spec_generator"
 
 module FunApi
@@ -20,11 +22,13 @@ module FunApi
     attr_reader :openapi_config, :container, :startup_hooks, :shutdown_hooks
 
     def initialize(title: "FunApi Application", version: "1.0.0", description: "")
-      @router = Router.new
+      @route_set = RouteSet.new
       @middleware_stack = []
       @container = Dry::Container.new
       @startup_hooks = []
       @shutdown_hooks = []
+      @exception_handlers = {}
+      @dependency_overrides = {}
       @openapi_config = {
         title: title,
         version: version,
@@ -62,18 +66,17 @@ module FunApi
       end
     end
 
+    def exception_handler(exception_class, &block)
+      raise ArgumentError, "exception_handler requires a block" unless block_given?
+
+      @exception_handlers[exception_class] = block
+      self
+    end
+
     def register(key, &block)
+      provider = block_provider(block)
       @container.register(key) do
-        if block.arity == 0
-          result = block.call
-          if result.is_a?(Array) && result.length == 2 && result[1].respond_to?(:call)
-            ManagedDependency.new(result[0], result[1])
-          else
-            SimpleDependency.new(result)
-          end
-        else
-          BlockDependency.new(block)
-        end
+        BlockDependency.new(provider)
       end
     end
 
@@ -81,27 +84,109 @@ module FunApi
       @container.resolve(key)
     end
 
-    def get(path, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("GET", path, query: query, response_schema: response_schema, depends: depends, &blk)
+    def routes
+      @route_set.routes.reject { |route| route.metadata[:internal] }.map do |route|
+        metadata = route.metadata
+        {
+          verb: route.verb,
+          path: metadata[:path_template],
+          tags: metadata[:tags] || [],
+          websocket: metadata[:websocket] || false,
+          path_schema: schema_name(metadata[:path_schema]),
+          query_schema: schema_name(metadata[:query_schema]),
+          body_schema: schema_name(metadata[:body_schema]),
+          response_schema: schema_name(metadata[:response_schema])
+        }
+      end
     end
 
-    def post(path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("POST", path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
+    def openapi_spec
+      generate_openapi_spec
     end
 
-    def put(path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("PUT", path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
+    def schemas
+      seen = []
+      @route_set.routes.each do |route|
+        next if route.metadata[:internal]
+
+        %i[path_schema query_schema body_schema response_schema].each do |key|
+          schema = route.metadata[key]
+          next unless schema
+
+          Array(schema).each { |member| seen << member unless seen.include?(member) }
+        end
+      end
+      seen
     end
 
-    def patch(path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("PATCH", path, body: body, query: query, response_schema: response_schema, depends: depends, &blk)
+    def override_dependency(key, replacement)
+      @dependency_overrides[key.to_sym] = replacement
+      self
     end
 
-    def delete(path, query: nil, response_schema: nil, depends: nil, &blk)
-      add_route("DELETE", path, query: query, response_schema: response_schema, depends: depends, &blk)
+    def reset_overrides!
+      @dependency_overrides.clear
+      self
+    end
+
+    def get(route_path, path: nil, query: nil, response_schema: nil, depends: nil, tags: nil, &blk)
+      add_route("GET", route_path, path: path, query: query, response_schema: response_schema, depends: depends, tags: tags, &blk)
+    end
+
+    def post(route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, tags: nil, &blk)
+      add_route("POST", route_path, path: path, body: body, query: query, response_schema: response_schema, depends: depends, tags: tags, &blk)
+    end
+
+    def put(route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, tags: nil, &blk)
+      add_route("PUT", route_path, path: path, body: body, query: query, response_schema: response_schema, depends: depends, tags: tags, &blk)
+    end
+
+    def patch(route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, tags: nil, &blk)
+      add_route("PATCH", route_path, path: path, body: body, query: query, response_schema: response_schema, depends: depends, tags: tags, &blk)
+    end
+
+    def delete(route_path, path: nil, query: nil, response_schema: nil, depends: nil, tags: nil, &blk)
+      add_route("DELETE", route_path, path: path, query: query, response_schema: response_schema, depends: depends, tags: tags, &blk)
+    end
+
+    def websocket(route_path, path: nil, query: nil, &blk)
+      require_relative "websocket"
+
+      metadata = {
+        path_schema: path,
+        query_schema: query,
+        tags: [],
+        dependencies: {},
+        websocket: true
+      }
+
+      @route_set.add("GET", route_path, metadata: metadata) do |req, path_params|
+        handle_websocket_route(req, path_params, path, query, &blk)
+      end
+    end
+
+    def include_router(router, prefix: "", depends: {}, tags: [])
+      router.each_route(
+        inherited_prefix: normalize_router_prefix(prefix),
+        inherited_depends: Router.coerce_depends(depends),
+        inherited_tags: Array(tags)
+      ) do |verb:, path:, path_schema:, body_schema:, query_schema:, response_schema:, depends:, tags:, block:|
+        add_route(verb, path, path: path_schema, body: body_schema, query: query_schema, response_schema: response_schema, depends: depends, tags: tags, &block)
+      end
+      self
+    end
+
+    def mount(prefix, rack_app)
+      @route_set.mount(prefix, rack_app)
+      self
     end
 
     def use(middleware, *args, &block)
+      if @middleware_chain
+        raise "Cannot add middleware after the application has started handling requests. " \
+          "Register all middleware (use / add_cors / add_request_logger) inside the FunApi::App.new block, before the first request."
+      end
+
       @middleware_stack << [middleware, args, block]
       self
     end
@@ -135,8 +220,8 @@ module FunApi
     end
 
     def call(env)
-      app = build_middleware_chain
-      app.call(env)
+      @middleware_chain ||= build_middleware_chain
+      @middleware_chain.call(env)
     end
 
     # Run the app with Falcon
@@ -179,31 +264,76 @@ module FunApi
 
     private
 
-    def add_route(verb, path, body: nil, query: nil, response_schema: nil, depends: nil, &blk)
-      metadata = {
-        body_schema: body,
-        query_schema: query,
-        response_schema: response_schema,
-        dependencies: normalize_dependencies(depends)
-      }
+    def schema_name(schema)
+      return nil if schema.nil?
 
-      @router.add(verb, path, metadata: metadata) do |req, path_params|
-        handle_async_route(req, path_params, body, query, response_schema, metadata[:dependencies], &blk)
+      if schema.is_a?(Array)
+        inner = schema_name(schema.first)
+        inner ? "[#{inner}]" : nil
+      elsif schema.is_a?(Class) && schema < FunApi::Model
+        schema.name || "Model"
+      else
+        "Schema"
       end
     end
 
-    def handle_async_route(req, path_params, body_schema, query_schema, response_schema, dependencies, &blk)
+    def block_provider(block)
+      return block if block.arity != 0
+
+      proc do |provide|
+        result = block.call
+        if result.is_a?(Array) && result.length == 2 && result[1].respond_to?(:call)
+          resource, cleanup = result
+          begin
+            provide.call(resource)
+          ensure
+            cleanup.call
+          end
+        else
+          provide.call(result)
+        end
+      end
+    end
+
+    def normalize_router_prefix(prefix)
+      value = prefix.to_s
+      return "" if value.empty? || value == "/"
+
+      value = "/#{value}" unless value.start_with?("/")
+      value.chomp("/")
+    end
+
+    def add_route(verb, route_path, path: nil, body: nil, query: nil, response_schema: nil, depends: nil, tags: nil, &blk)
+      metadata = {
+        path_schema: path,
+        body_schema: body,
+        query_schema: query,
+        response_schema: response_schema,
+        tags: Array(tags),
+        dependencies: normalize_dependencies(depends)
+      }
+
+      @route_set.add(verb, route_path, metadata: metadata) do |req, path_params|
+        handle_async_route(req, path_params, path, body, query, response_schema, metadata[:dependencies], &blk)
+      end
+    end
+
+    def handle_async_route(req, path_params, path_schema, body_schema, query_schema, response_schema, dependencies, &blk)
       current_task = Async::Task.current
       Fiber[:async_task] = current_task
       cleanup_objects = []
       background_tasks = BackgroundTasks.new(current_task)
+      deferred = false
 
       begin
         input = {
-          path: path_params,
+          path: path_params.transform_keys(&:to_sym),
           query: req.params,
-          body: parse_body(req)
+          body: parse_body(req),
+          headers: extract_headers(req.env)
         }
+
+        input[:path] = Schema.validate(path_schema, input[:path], location: "path") if path_schema
 
         input[:query] = Schema.validate(query_schema, input[:query], location: "query") if query_schema
 
@@ -218,38 +348,187 @@ module FunApi
 
         payload, status = blk.call(input, req, current_task, **resolved_deps)
 
-        if payload.is_a?(TemplateResponse)
-          background_tasks.execute
-          return payload.to_response
+        response = if payload.is_a?(StreamingResponse)
+          payload.to_response
+        elsif payload.is_a?(TemplateResponse)
+          payload.to_response
+        else
+          payload = normalize_payload(payload)
+          payload = Schema.validate_response(response_schema, payload) if response_schema
+
+          [
+            status || 200,
+            {"content-type" => "application/json"},
+            [JSON.dump(payload)]
+          ]
         end
 
-        payload = normalize_payload(payload)
+        unless background_tasks.empty? && cleanup_objects.empty?
+          schedule_post_response(current_task, background_tasks, cleanup_objects)
+          deferred = true
+        end
 
-        payload = Schema.validate_response(response_schema, payload) if response_schema
-
-        background_tasks.execute
-
-        [
-          status || 200,
-          {"content-type" => "application/json"},
-          [JSON.dump(payload)]
-        ]
-      rescue ValidationError => e
-        e.to_response
-      rescue HTTPException => e
-        e.to_response
+        response
+      rescue => e
+        handle_exception(e, req)
       ensure
-        cleanup_objects.each do |wrapper|
-          wrapper.cleanup
-        rescue => e
-          warn "Dependency cleanup failed: #{e.message}"
-        end
+        run_cleanup(cleanup_objects) unless deferred
         Fiber[:async_task] = nil
       end
     end
 
+    def handle_websocket_route(req, path_params, path_schema, query_schema, &blk)
+      Fiber[:async_task] = Async::Task.current
+
+      input = {
+        path: path_params.transform_keys(&:to_sym),
+        query: req.GET,
+        headers: extract_headers(req.env)
+      }
+
+      input[:path] = Schema.validate(path_schema, input[:path], location: "path") if path_schema
+      input[:query] = Schema.validate(query_schema, input[:query], location: "query") if query_schema
+
+      response = FunApi::WebSocket.open(req.env) do |connection|
+        blk.call(connection, input)
+      end
+
+      response || FunApi::WebSocket.upgrade_required
+    rescue => e
+      handle_exception(e, req)
+    ensure
+      Fiber[:async_task] = nil
+    end
+
+    def schedule_post_response(task, background_tasks, cleanup_objects)
+      task.async do |post_task|
+        sleep(0)
+        background_tasks.execute
+      ensure
+        run_cleanup(cleanup_objects)
+      end
+    end
+
+    def run_cleanup(cleanup_objects)
+      cleanup_objects.each do |wrapper|
+        wrapper.cleanup
+      rescue => e
+        warn "Dependency cleanup failed: #{e.message}"
+      end
+    end
+
+    def handle_exception(error, req)
+      handler = find_exception_handler(error.class)
+
+      if handler
+        payload, status = handler.call(error, req)
+        return [
+          status || 500,
+          {"content-type" => "application/json"},
+          [JSON.dump(normalize_payload(payload))]
+        ]
+      end
+
+      return error.to_response if error.is_a?(HTTPException)
+
+      internal_server_error_response(error, req)
+    end
+
+    def find_exception_handler(error_class)
+      error_class.ancestors.each do |ancestor|
+        handler = @exception_handlers[ancestor]
+        return handler if handler
+      end
+      nil
+    end
+
+    def internal_server_error_response(error, req = nil)
+      unless development_env?
+        return [
+          500,
+          {"content-type" => "application/json"},
+          [JSON.dump(detail: "Internal Server Error")]
+        ]
+      end
+
+      if req && prefers_html?(req)
+        return [
+          500,
+          {"content-type" => "text/html; charset=utf-8"},
+          [dev_error_html(error)]
+        ]
+      end
+
+      detail = {
+        error: error.class.name,
+        message: error.message,
+        backtrace: error.backtrace&.first(10)
+      }
+
+      [
+        500,
+        {"content-type" => "application/json"},
+        [JSON.dump(detail: detail)]
+      ]
+    end
+
+    def development_env?
+      env = ENV["FUNAPI_ENV"] || ENV["RACK_ENV"]
+      env == "development"
+    end
+
+    def prefers_html?(req)
+      accept = req.get_header("HTTP_ACCEPT").to_s
+      return false if accept.empty?
+
+      html_index = accept.index("text/html")
+      json_index = accept.index("application/json")
+
+      return false unless html_index
+
+      json_index.nil? || html_index < json_index
+    end
+
+    def dev_error_html(error)
+      backtrace = (error.backtrace || []).map { |line| escape_html(line) }.join("\n")
+
+      <<~HTML
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>#{escape_html(error.class.name)}: #{escape_html(error.message)}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; background: #1e1e2e; color: #cdd6f4; }
+            header { background: #f38ba8; color: #11111b; padding: 1.5rem 2rem; }
+            header h1 { margin: 0 0 0.25rem; font-size: 1.25rem; }
+            header p { margin: 0; font-family: monospace; font-size: 1rem; }
+            main { padding: 1.5rem 2rem; }
+            h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: #a6adc8; }
+            pre { background: #181825; border: 1px solid #313244; border-radius: 6px; padding: 1rem; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; }
+          </style>
+        </head>
+        <body>
+          <header>
+            <h1>#{escape_html(error.class.name)}</h1>
+            <p>#{escape_html(error.message)}</p>
+          </header>
+          <main>
+            <h2>Backtrace</h2>
+            <pre>#{backtrace}</pre>
+          </main>
+        </body>
+        </html>
+      HTML
+    end
+
+    def escape_html(text)
+      Rack::Utils.escape_html(text.to_s)
+    end
+
     def build_middleware_chain
-      app = @router
+      app = @route_set
 
       @middleware_stack.reverse_each do |middleware, args, block|
         app = if args.length == 1 && args.first.is_a?(Hash) && args.first.keys.all? { |k| k.is_a?(Symbol) }
@@ -308,10 +587,15 @@ module FunApi
 
       case content_type
       when %r{application/json}
+        return {} if body.nil? || body.strip.empty?
+
         begin
           JSON.parse(body, symbolize_names: true)
-        rescue
-          {}
+        rescue JSON::ParserError => e
+          raise HTTPException.new(
+            status_code: 400,
+            detail: [{loc: ["body"], msg: "Invalid JSON: #{e.message}", type: "json_invalid"}]
+          )
         end
       when %r{application/x-www-form-urlencoded}
         request.POST
@@ -321,8 +605,11 @@ module FunApi
     end
 
     def extract_headers(env)
-      env.select { |k, _v| k.start_with?("HTTP_") }
-        .transform_keys { |k| k.sub("HTTP_", "").downcase }
+      headers = env.select { |k, _v| k.start_with?("HTTP_") }
+        .transform_keys { |k| k.delete_prefix("HTTP_").downcase.tr("_", "-") }
+      headers["content-type"] = env["CONTENT_TYPE"] if env["CONTENT_TYPE"]
+      headers["content-length"] = env["CONTENT_LENGTH"] if env["CONTENT_LENGTH"]
+      headers
     end
 
     def normalize_response(response)
@@ -397,7 +684,8 @@ module FunApi
             {type: :container, key: key.to_sym}
           else
             unless value.respond_to?(:call)
-              raise ArgumentError, "Dependency must be callable, Depends, Symbol, or nil for #{key}"
+              raise ArgumentError,
+                "dependency #{key.inspect} must be callable, a FunApi::Depends, a Symbol naming a registered dependency, or nil; got #{value.class}"
             end
 
             {type: :depends, callable: Depends.new(value)}
@@ -405,7 +693,8 @@ module FunApi
           end
         end
       else
-        raise ArgumentError, "depends must be an Array or Hash"
+        raise ArgumentError,
+          "depends must be an Array of names (e.g. [:db]) or a Hash (e.g. {db: FunApi.Depends(...)}); got #{depends.class}"
       end
 
       normalized
@@ -424,27 +713,35 @@ module FunApi
         container: @container
       }
 
-      resolved = dependencies.transform_values do |dep_info|
-        case dep_info[:type]
-        when :container
-          cache_key = "container:#{dep_info[:key]}"
-          if cache.key?(cache_key)
-            cache[cache_key][:resource]
-          else
-            dependency_wrapper = @container.resolve(dep_info[:key])
-            resource = dependency_wrapper.call
-            cache[cache_key] = {resource: resource, wrapper: dependency_wrapper}
-            cleanup_objects << dependency_wrapper
-            resource
+      resolved = dependencies.each_with_object({}) do |(dep_name, dep_info), acc|
+        override = dependency_override(dep_name, dep_info)
+
+        acc[dep_name] = if override
+          resolve_override(override.first)
+        else
+          case dep_info[:type]
+          when :container
+            cache_key = "container:#{dep_info[:key]}"
+            if cache.key?(cache_key)
+              cache[cache_key][:resource]
+            else
+              dependency_wrapper = @container.resolve(dep_info[:key])
+              resource = dependency_wrapper.call
+              cache[cache_key] = {resource: resource, wrapper: dependency_wrapper}
+              cleanup_objects << dependency_wrapper
+              resource
+            end
+          when :depends
+            result, cleanup = dep_info[:callable].call(context, cache)
+            cleanup_objects << ManagedDependency.new(result, cleanup) if cleanup
+            result
           end
-        when :depends
-          result, cleanup = dep_info[:callable].call(context, cache)
-          cleanup_objects << ManagedDependency.new(result, cleanup) if cleanup
-          result
         end
       end
 
       [resolved, cleanup_objects]
+    rescue HTTPException
+      raise
     rescue => e
       raise HTTPException.new(
         status_code: 500,
@@ -452,8 +749,25 @@ module FunApi
       )
     end
 
+    def dependency_override(dep_name, dep_info)
+      return [@dependency_overrides[dep_name]] if @dependency_overrides.key?(dep_name)
+
+      key = dep_info[:key]
+      return [@dependency_overrides[key]] if key && @dependency_overrides.key?(key)
+
+      nil
+    end
+
+    def resolve_override(replacement)
+      if replacement.is_a?(Proc) || replacement.is_a?(Method)
+        replacement.call
+      else
+        replacement
+      end
+    end
+
     def register_openapi_routes
-      @router.add("GET", "/openapi.json", metadata: {internal: true}) do |_req, _path_params|
+      @route_set.add("GET", "/openapi.json", metadata: {internal: true}) do |_req, _path_params|
         spec = generate_openapi_spec
         [
           200,
@@ -462,7 +776,7 @@ module FunApi
         ]
       end
 
-      @router.add("GET", "/docs", metadata: {internal: true}) do |_req, _path_params|
+      @route_set.add("GET", "/docs", metadata: {internal: true}) do |_req, _path_params|
         html = swagger_ui_html
         [
           200,
@@ -473,7 +787,7 @@ module FunApi
     end
 
     def generate_openapi_spec
-      generator = OpenAPI::SpecGenerator.new(@router.routes, info: @openapi_config)
+      generator = OpenAPI::SpecGenerator.new(@route_set.routes, info: @openapi_config)
       generator.generate
     end
 

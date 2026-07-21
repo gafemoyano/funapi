@@ -131,7 +131,7 @@ app = FunApi::App.new(title: "My API") do |api|
     puts "Goodbye!"
   end
 
-  api.get '/health' do |input, req, task|
+  api.get '/health' do |input, req|
     [{ status: 'ok', db: $db.connected? }, 200]
   end
 end
@@ -154,7 +154,7 @@ app = FunApi::App.new do |api|
     api.resolve(:db).close_all
   end
 
-  api.get '/users', depends: [:db] do |input, req, task, db:|
+  api.get '/users', depends: [:db] do |input, req, db:|
     [{ users: db.query("SELECT * FROM users") }, 200]
   end
 end

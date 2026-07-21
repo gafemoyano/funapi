@@ -8,10 +8,10 @@ The handler is the function that processes a request and returns a response.
 
 ## Handler Signature
 
-Every handler receives three positional arguments:
+Every handler receives two positional arguments:
 
 ```ruby
-api.get '/path' do |input, req, task|
+api.get '/path' do |input, req|
   [response_data, status_code]
 end
 ```
@@ -20,26 +20,29 @@ end
 |----------|------|-------------|
 | `input` | Hash | Request data (path, query, body) |
 | `req` | Rack::Request | Full Rack request object |
-| `task` | Async::Task | Current async task for concurrency |
+
+For concurrency, use the module functions `FunApi.async { ... }` and
+`FunApi.sleep(n)` — no task parameter is required.
 
 ## The Input Hash
 
 The `input` hash normalizes all request data:
 
 ```ruby
-api.post '/users/:id' do |input, req, task|
-  input[:path]   # Path parameters: { 'id' => '123' }
-  input[:query]  # Query params: { search: 'ruby' }
-  input[:body]   # Parsed JSON body: { name: 'Alice' }
+api.post '/users/:id' do |input, req|
+  input[:path]     # Path parameters: { id: '123' }
+  input[:query]    # Query params: { search: 'ruby' }
+  input[:body]     # Parsed JSON body: { name: 'Alice' }
+  input[:headers]  # Request headers: { 'content-type' => 'application/json' }
 end
 ```
 
 ### Accessing Path Parameters
 
 ```ruby
-api.get '/posts/:post_id/comments/:id' do |input, req, task|
-  post_id = input[:path]['post_id']
-  comment_id = input[:path]['id']
+api.get '/posts/:post_id/comments/:id' do |input, req|
+  post_id = input[:path][:post_id]
+  comment_id = input[:path][:id]
   # ...
 end
 ```
@@ -48,7 +51,7 @@ end
 
 ```ruby
 # GET /search?q=ruby&page=2
-api.get '/search' do |input, req, task|
+api.get '/search' do |input, req|
   query = input[:query][:q]
   page = input[:query][:page]
   # ...
@@ -58,7 +61,7 @@ end
 ### Accessing Request Body
 
 ```ruby
-api.post '/users' do |input, req, task|
+api.post '/users' do |input, req|
   name = input[:body][:name]
   email = input[:body][:email]
   # ...
@@ -70,7 +73,7 @@ end
 The `req` object is a standard `Rack::Request`:
 
 ```ruby
-api.get '/info' do |input, req, task|
+api.get '/info' do |input, req|
   {
     method: req.request_method,
     path: req.path_info,
@@ -85,22 +88,23 @@ end
 ### Accessing Headers
 
 ```ruby
-api.get '/auth' do |input, req, task|
+api.get '/auth' do |input, req|
   auth_header = req.get_header('HTTP_AUTHORIZATION')
   # or
   auth_header = req.env['HTTP_AUTHORIZATION']
 end
 ```
 
-## The Async Task
+## Concurrency
 
-The `task` parameter enables concurrent operations:
+Use `FunApi.async { ... }` to run operations concurrently (and `FunApi.sleep(n)`
+for non-blocking sleeps):
 
 ```ruby
-api.get '/dashboard' do |input, req, task|
+api.get '/dashboard' do |input, req|
   # Run operations concurrently
-  user = task.async { UserService.find(id) }
-  posts = task.async { PostService.recent }
+  user = FunApi.async { UserService.find(id) }
+  posts = FunApi.async { PostService.recent }
   
   [{
     user: user.wait,
@@ -134,7 +138,7 @@ Handlers must return `[data, status_code]`:
 Return a `TemplateResponse` for HTML:
 
 ```ruby
-api.get '/' do |input, req, task|
+api.get '/' do |input, req|
   templates.response('home.html.erb', title: 'Home')
 end
 ```
@@ -146,7 +150,7 @@ See [Templates](/docs/patterns/templates) for more.
 When using dependency injection, dependencies come as keyword arguments:
 
 ```ruby
-api.get '/users', depends: [:db, :logger] do |input, req, task, db:, logger:|
+api.get '/users', depends: [:db, :logger] do |input, req, db:, logger:|
   logger.info("Fetching users")
   users = db.query("SELECT * FROM users")
   [{ users: users }, 200]

@@ -42,11 +42,11 @@ app = FunApi::App.new(
   version: "1.0.0",
   description: "A simple API example"
 ) do |api|
-  api.get '/hello' do |input, req, task|
+  api.get '/hello' do |input, req|
     [{ message: 'Hello, World!' }, 200]
   end
   
-  api.post '/users', body: UserSchema do |input, req, task|
+  api.post '/users', body: UserSchema do |input, req|
     user = input[:body]
     [{ created: user }, 201]
   end
@@ -61,15 +61,15 @@ Visit http://localhost:9292/docs to see your interactive API documentation!
 
 ### 1. Async-First Request Handling
 
-All route handlers receive the current `Async::Task` as the third parameter, enabling true concurrent execution within your routes:
+Handlers take `|input, req|` and run on Falcon's fiber reactor. Spawn concurrent work with `FunApi.async { }` (returns a task; call `#wait`) and suspend without blocking via `FunApi.sleep(n)` — handler code never touches an event-loop handle:
 
 ```ruby
-api.get '/dashboard/:id' do |input, req, task|
+api.get '/dashboard/:id' do |input, req|
   user_id = input[:path]['id']
   
-  user_task = task.async { fetch_user_data(user_id) }
-  posts_task = task.async { fetch_user_posts(user_id) }
-  stats_task = task.async { fetch_user_stats(user_id) }
+  user_task = FunApi.async { fetch_user_data(user_id) }
+  posts_task = FunApi.async { fetch_user_posts(user_id) }
+  stats_task = FunApi.async { fetch_user_stats(user_id) }
   
   data = {
     user: user_task.wait,
@@ -80,6 +80,46 @@ api.get '/dashboard/:id' do |input, req, task|
   [{ dashboard: data }, 200]
 end
 ```
+
+### Streaming, SSE & WebSockets
+
+Because FunApi is async-first, incremental responses are first-class. Return a `StreamingResponse`, stream Server-Sent Events, or upgrade to a WebSocket — each connection runs on its own fiber, so a slow stream never blocks other requests.
+
+```ruby
+# Chunked streaming
+api.get '/export' do |input, req|
+  FunApi::StreamingResponse.new(content_type: 'application/x-ndjson') do |stream|
+    Report.each_row { |row| stream << "#{JSON.generate(row)}\n" }
+  end
+end
+
+# Server-Sent Events with a heartbeat
+api.get '/events' do |input, req|
+  FunApi::SSE.response(heartbeat: 15) do |sse|
+    sse.send(data: { tick: 1 }, event: 'tick', id: '1')
+  end
+end
+
+# WebSockets via async-websocket
+api.websocket '/ws/:room' do |socket, input|
+  while (message = socket.read)
+    socket.write("echo: #{message.to_str}")
+  end
+end
+```
+
+**Flagship demo** — `examples/llm_proxy_demo.rb` is a ~30-line streaming LLM proxy: `POST /chat` streams tokens from a stub model over SSE, and many clients stream concurrently without blocking one another:
+
+```ruby
+api.post '/chat', body: ChatRequest do |input, req|
+  FunApi::SSE.response(heartbeat: 15) do |sse|
+    stub_llm(input[:body][:prompt]) { |token| sse.send(data: token, event: 'token') }
+    sse.send(data: '[DONE]', event: 'done')
+  end
+end
+```
+
+See the [Streaming guide](docs-site/content/patterns/streaming.md) for disconnect handling, backpressure, and testing.
 
 ### 2. Request Validation
 
@@ -99,17 +139,17 @@ QuerySchema = FunApi::Schema.define do
 end
 
 app = FunApi::App.new do |api|
-  api.get '/hello', query: QuerySchema do |input, req, task|
+  api.get '/hello', query: QuerySchema do |input, req|
     name = input[:query][:name] || 'World'
     [{ msg: "Hello, #{name}!" }, 200]
   end
 
-  api.post '/users', body: UserCreateSchema do |input, req, task|
+  api.post '/users', body: UserCreateSchema do |input, req|
     user = input[:body]
     [{ created: user }, 201]
   end
   
-  api.post '/users/batch', body: [UserCreateSchema] do |input, req, task|
+  api.post '/users/batch', body: [UserCreateSchema] do |input, req|
     users = input[:body].map { |u| create_user(u) }
     [users, 201]
   end
@@ -131,7 +171,7 @@ end
 app = FunApi::App.new do |api|
   api.post '/users', 
     body: UserCreateSchema,
-    response_schema: UserOutputSchema do |input, req, task|
+    response_schema: UserOutputSchema do |input, req|
       
     user = {
       id: 1,
@@ -145,7 +185,7 @@ app = FunApi::App.new do |api|
   end
   
   api.get '/users',
-    response_schema: [UserOutputSchema] do |input, req, task|
+    response_schema: [UserOutputSchema] do |input, req|
     users = fetch_all_users()
     [users, 200]
   end
@@ -162,11 +202,11 @@ app = FunApi::App.new(
   version: "1.0.0",
   description: "A comprehensive user management system"
 ) do |api|
-  api.get '/users', query: QuerySchema, response_schema: [UserOutputSchema] do |input, req, task|
+  api.get '/users', query: QuerySchema, response_schema: [UserOutputSchema] do |input, req|
     [fetch_users(input[:query]), 200]
   end
   
-  api.post '/users', body: UserCreateSchema, response_schema: UserOutputSchema do |input, req, task|
+  api.post '/users', body: UserCreateSchema, response_schema: UserOutputSchema do |input, req|
     [create_user(input[:body]), 201]
   end
 end
@@ -243,7 +283,7 @@ app = FunApi::App.new do |api|
   api.use Rack::ETag
   api.use Rack::Session::Cookie, secret: 'your_secret'
   
-  api.get '/protected' do |input, req, task|
+  api.get '/protected' do |input, req|
     [{ data: 'Protected resource' }, 200]
   end
 end
@@ -286,7 +326,7 @@ All route handlers receive a unified `input` hash:
 Execute tasks after the response is sent, perfect for emails, logging, and webhooks:
 
 ```ruby
-api.post '/signup', body: UserSchema do |input, req, task, background:|
+api.post '/signup', body: UserSchema do |input, req, background:|
   user = create_user(input[:body])
   
   # Tasks execute AFTER response is sent but BEFORE dependencies close
@@ -350,7 +390,7 @@ background.add_task(->(msg, to:) { send(msg, to) }, 'Hello', to: 'user@example.c
 api.register(:mailer) { Mailer.new }
 api.register(:logger) { Logger.new }
 
-api.post '/signup', depends: [:mailer, :logger] do |input, req, task, mailer:, logger:, background:|
+api.post '/signup', depends: [:mailer, :logger] do |input, req, mailer:, logger:, background:|
   user = create_user(input[:body])
   
   # Dependencies captured in closure, available to background tasks
@@ -374,11 +414,11 @@ require 'funapi/templates'
 templates = FunApi::Templates.new(directory: 'templates')
 
 app = FunApi::App.new do |api|
-  api.get '/' do |input, req, task|
+  api.get '/' do |input, req|
     templates.response('index.html.erb', title: 'Home', message: 'Welcome!')
   end
 
-  api.get '/users/:id' do |input, req, task|
+  api.get '/users/:id' do |input, req|
     user = fetch_user(input[:path]['id'])
     templates.response('user.html.erb', user: user)
   end
@@ -395,12 +435,12 @@ templates = FunApi::Templates.new(
   layout: 'layouts/application.html.erb'
 )
 
-api.get '/' do |input, req, task|
+api.get '/' do |input, req|
   templates.response('home.html.erb', title: 'Home')
 end
 
 # Disable layout for partials/HTMX responses
-api.post '/items' do |input, req, task|
+api.post '/items' do |input, req|
   item = create_item(input[:body])
   templates.response('items/_item.html.erb', layout: false, item: item, status: 201)
 end
@@ -415,11 +455,11 @@ templates = FunApi::Templates.new(directory: 'templates')
 public_templates = templates.with_layout('layouts/public.html.erb')
 admin_templates = templates.with_layout('layouts/admin.html.erb')
 
-api.get '/' do |input, req, task|
+api.get '/' do |input, req|
   public_templates.response('home.html.erb', title: 'Home')
 end
 
-api.get '/admin' do |input, req, task|
+api.get '/admin' do |input, req|
   admin_templates.response('admin/dashboard.html.erb', title: 'Dashboard')
 end
 ```
@@ -457,18 +497,18 @@ Render partials within templates using `render_partial`:
 FunApi templates work great with HTMX for dynamic HTML updates:
 
 ```ruby
-api.get '/items' do |input, req, task|
+api.get '/items' do |input, req|
   items = fetch_items
   templates.response('items/index.html.erb', items: items)
 end
 
-api.post '/items', body: ItemSchema do |input, req, task|
+api.post '/items', body: ItemSchema do |input, req|
   item = create_item(input[:body])
   # Return partial for HTMX to insert
   templates.response('items/_item.html.erb', layout: false, item: item, status: 201)
 end
 
-api.delete '/items/:id' do |input, req, task|
+api.delete '/items/:id' do |input, req|
   delete_item(input[:path]['id'])
   # Return empty response for HTMX delete
   FunApi::TemplateResponse.new('')
@@ -557,7 +597,7 @@ app = FunApi::App.new(
   api.add_cors(allow_origins: ['*'])
   api.add_request_logger
   
-  api.get '/users', query: QuerySchema, response_schema: [UserOutputSchema] do |input, req, task|
+  api.get '/users', query: QuerySchema, response_schema: [UserOutputSchema] do |input, req|
     users = [
       { id: 1, name: 'John Doe', email: 'john@example.com', age: 30 },
       { id: 2, name: 'Jane Smith', email: 'jane@example.com' }
@@ -565,23 +605,23 @@ app = FunApi::App.new(
     [users, 200]
   end
 
-  api.get '/users/:id', response_schema: UserOutputSchema do |input, req, task|
+  api.get '/users/:id', response_schema: UserOutputSchema do |input, req|
     user_id = input[:path]['id']
     user = { id: user_id.to_i, name: 'John Doe', email: 'john@example.com', age: 30 }
     [user, 200]
   end
 
-  api.post '/users', body: UserCreateSchema, response_schema: UserOutputSchema do |input, req, task|
+  api.post '/users', body: UserCreateSchema, response_schema: UserOutputSchema do |input, req|
     user = input[:body].merge(id: rand(1000))
     [user, 201]
   end
   
-  api.get '/dashboard/:id' do |input, req, task|
+  api.get '/dashboard/:id' do |input, req|
     user_id = input[:path]['id']
     
-    user_task = task.async { fetch_user(user_id) }
-    posts_task = task.async { fetch_posts(user_id) }
-    stats_task = task.async { fetch_stats(user_id) }
+    user_task = FunApi.async { fetch_user(user_id) }
+    posts_task = FunApi.async { fetch_posts(user_id) }
+    stats_task = FunApi.async { fetch_stats(user_id) }
     
     data = {
       user: user_task.wait,
@@ -609,8 +649,11 @@ FunApi::Server::Falcon.start(app, port: 9292)
 
 - **rack** (>= 3.0.0): Web server interface
 - **async** (>= 2.8): Async/await and concurrency primitives
+- **async-websocket** (>= 0.30): WebSocket support
 - **dry-schema** (>= 1.13): Schema validation
 - **falcon** (>= 0.44): High-performance async HTTP server
+
+For the database path, add `sequel` and a driver (e.g. `pg` >= 1.3) to your own Gemfile and `require "funapi/sequel"`.
 
 ## Design Goals
 
@@ -635,6 +678,8 @@ Active development. Core features implemented:
 - ✅ Background tasks (post-response execution)
 - ✅ Template rendering (ERB with layouts and partials)
 - ✅ Lifecycle hooks (startup/shutdown)
+- ✅ Streaming responses, Server-Sent Events, and WebSockets
+- ✅ Sequel integration with a fibered connection pool (`funapi/sequel`)
 
 ## Future Enhancements
 
@@ -642,9 +687,9 @@ Active development. Core features implemented:
 - ~~Background tasks~~ ✅ Implemented
 - ~~Template rendering~~ ✅ Implemented
 - ~~Lifecycle hooks (startup/shutdown)~~ ✅ Implemented
+- ~~WebSocket support~~ ✅ Implemented
 - Path parameter type validation
 - Response schema options (exclude_unset, include, exclude)
-- WebSocket support
 - Content negotiation (JSON, XML, etc.)
 
 ## Development

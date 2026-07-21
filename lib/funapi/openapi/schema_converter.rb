@@ -1,6 +1,10 @@
 module FunApi
   module OpenAPI
     class SchemaConverter
+      def self.model?(schema)
+        schema.is_a?(Class) && schema < FunApi::Model
+      end
+
       def self.to_json_schema(dry_schema, schema_name = nil)
         return nil unless dry_schema
 
@@ -10,6 +14,8 @@ module FunApi
             items: to_json_schema(dry_schema.first, schema_name)
           }
         end
+
+        return dry_schema.json_schema if model?(dry_schema)
 
         properties = {}
         required = []
