@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+export PATH="$HOME/.local/bin:$PATH"
+
+mise exec ruby -- ruby --version
+mise exec ruby -- bundle check
+BUNDLE_GEMFILE="$PWD/docs-site/Gemfile" mise exec ruby -- bundle check

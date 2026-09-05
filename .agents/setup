@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+repo_root="$PWD"
+export PATH="$HOME/.local/bin:$PATH"
+
+printf '\nChecking system prerequisites\n'
+packages=()
+for package in ca-certificates curl build-essential libssl-dev libyaml-dev zlib1g-dev libffi-dev libreadline-dev libpq-dev; do
+  if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -qx 'install ok installed'; then
+    packages+=("$package")
+  fi
+done
+if ((${#packages[@]})); then
+  time sudo apt-get update -qq
+  time sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
+fi
+
+printf '\nInstalling pinned Ruby toolchain\n'
+if ! command -v mise >/dev/null; then
+  time curl --fail --silent --show-error --location https://mise.run | sh
+fi
+mise trust "$repo_root/.tool-versions"
+mise trust "$repo_root/docs-site/mise.toml"
+time mise install ruby
+
+profile_marker='# FunApi orb toolchain'
+if ! grep -Fqx "$profile_marker" "$HOME/.bash_profile" 2>/dev/null; then
+  cat >> "$HOME/.bash_profile" <<EOF
+
+$profile_marker
+case "\$PWD" in
+  "$repo_root"|"$repo_root"/*)
+    if [[ -z "\${FUNAPI_ORB_ENV:-}" ]]; then
+      export FUNAPI_ORB_ENV=1
+      export PATH="\$HOME/.local/bin:\$PATH"
+      eval "\$(mise env --shell bash)"
+    fi
+    ;;
+esac
+EOF
+fi
+
+bundler_version="$(awk '/^BUNDLED WITH$/{getline; print $1}' Gemfile.lock)"
+if ! mise exec ruby -- gem list --installed --exact bundler --version "$bundler_version" >/dev/null; then
+  time mise exec ruby -- gem install bundler --version "$bundler_version" --no-document
+fi
+
+printf '\nInstalling core dependencies from lockfile\n'
+time env BUNDLE_FROZEN=true mise exec ruby -- bundle "_${bundler_version}_" install --jobs 4
+
+printf '\nInstalling docs-site dependencies\n'
+time env BUNDLE_FROZEN=true BUNDLE_GEMFILE="$repo_root/docs-site/Gemfile" mise exec ruby -- bundle "_${bundler_version}_" install --jobs 4
