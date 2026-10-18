@@ -363,7 +363,9 @@ module FunApi
         end
 
         unless background_tasks.empty? && cleanup_objects.empty?
-          schedule_post_response(current_task, background_tasks, cleanup_objects)
+          response[2] = StreamingResponse::CompletionBody.new(response[2]) do
+            schedule_post_response(background_tasks, cleanup_objects)
+          end
           deferred = true
         end
 
@@ -394,12 +396,20 @@ module FunApi
       handle_exception(e, req)
     end
 
-    def schedule_post_response(task, background_tasks, cleanup_objects)
-      task.async do |post_task|
-        sleep(0)
-        background_tasks.execute
-      ensure
-        run_cleanup(cleanup_objects)
+    def schedule_post_response(background_tasks, cleanup_objects)
+      finalize = proc do |post_task|
+        post_task.defer_stop do
+          post_task.yield
+          background_tasks.execute
+        ensure
+          run_cleanup(cleanup_objects)
+        end
+      end
+
+      if Fiber.scheduler
+        Async::Task.new(Fiber.scheduler, &finalize).run
+      else
+        Async(&finalize).wait
       end
     end
 

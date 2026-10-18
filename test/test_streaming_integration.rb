@@ -59,13 +59,23 @@ class TestStreamingIntegration < Minitest::Test
   end
 
   def test_streaming_delivers_chunks_incrementally
+    events = []
     app = FunApi::App.new do |api|
-      api.get "/stream" do |_input, _req|
+      api.register(:resource) do
+        events << :acquired
+        [:resource, -> { events << :released }]
+      end
+      api.get "/stream", depends: [:resource] do |_input, _req, _task, resource:, background:|
+        background.add_task(-> { events << :background })
         FunApi::StreamingResponse.new(content_type: "text/plain") do |stream|
+          events << :body_start
           3.times do |i|
             FunApi.sleep(0.03)
+            assert_equal :resource, resource
+            assert_equal %i[acquired body_start], events
             stream.write("chunk#{i}\n")
           end
+          events << :body_end
         end
       end
     end
@@ -76,8 +86,87 @@ class TestStreamingIntegration < Minitest::Test
         response = client.get("/stream")
         chunks = []
         response.body.each { |chunk| chunks << chunk }
+        Async::Task.current.with_timeout(2) do
+          sleep 0.001 until events.include?(:released)
+        end
         assert_equal "chunk0\nchunk1\nchunk2\n", chunks.join
         assert_operator chunks.length, :>=, 2, "expected multiple streamed chunks"
+        assert_equal %i[acquired body_start body_end background released], events
+      ensure
+        client.close
+      end
+    end
+  end
+
+  def test_disconnected_client_finalizes_slow_stream
+    events = []
+    app = FunApi::App.new do |api|
+      api.register(:resource) do
+        events << :acquired
+        [:resource, -> {
+          sleep 0.001
+          events << :released
+        }]
+      end
+      api.get "/stream", depends: [:resource] do |_input, _req, _task, resource:, background:|
+        background.add_task(-> {
+          sleep 0.001
+          events << :background
+        })
+        FunApi::StreamingResponse.new do |stream|
+          events << :body_start
+          100.times do
+            stream.write(resource.to_s * 8192)
+            sleep 0.01
+          end
+          events << :all_chunks_written
+        ensure
+          events << :body_end
+        end
+      end
+    end
+
+    with_server(app) do |port, _endpoint|
+      socket = TCPSocket.new("localhost", port)
+      socket.write("GET /stream HTTP/1.1\r\nHost: localhost\r\n\r\n")
+      assert_includes socket.readpartial(4096), "200"
+      assert_equal %i[acquired body_start], events
+      socket.close
+      Async::Task.current.with_timeout(3) do
+        sleep 0.01 until events.include?(:released)
+      end
+      assert_equal %i[acquired body_start body_end background released], events
+    ensure
+      socket&.close unless socket&.closed?
+    end
+  end
+
+  def test_stream_error_finalizes_after_last_chunk
+    events = []
+    app = FunApi::App.new do |api|
+      api.register(:resource) { [:resource, -> { events << :released }] }
+      api.get "/stream", depends: [:resource] do |_input, _req, _task, resource:, background:|
+        background.add_task(-> { events << :background })
+        FunApi::StreamingResponse.new do |stream|
+          stream.write(resource.to_s)
+          sleep 0.03
+          events << :body_error
+          raise "stream failed"
+        end
+      end
+    end
+
+    with_server(app) do |_port, endpoint|
+      client = Async::HTTP::Client.new(endpoint)
+      begin
+        Async::Task.current.with_timeout(2) do
+          response = client.get("/stream")
+          assert_equal "resource", response.body.read
+          assert_empty events
+          response.body.each { |_chunk| }
+          sleep 0.001 until events.include?(:released)
+        end
+        assert_equal %i[body_error background released], events
       ensure
         client.close
       end

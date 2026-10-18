@@ -4,6 +4,143 @@ require "test_helper"
 require "stringio"
 
 class TestStreaming < Minitest::Test
+  def managed_stream(events, &producer)
+    FunApi::App.new do |api|
+      api.register(:resource) do
+        events << :acquired
+        [:resource, -> {
+          sleep 0.001
+          events << :released
+        }]
+      end
+      api.get "/stream", depends: [:resource] do |_input, _req, _task, resource:, background:|
+        background.add_task(-> {
+          sleep 0.001
+          events << :background
+        })
+        FunApi::StreamingResponse.new do |stream|
+          events << :body_start
+          producer.call(stream, resource)
+        ensure
+          events << :body_end
+        end
+      end
+    end
+  end
+
+  def test_stream_completion_errors_and_disconnect_finalize_once
+    [nil, RuntimeError, Errno::EPIPE, Errno::ECONNRESET, IOError].each do |error|
+      events = []
+      app = managed_stream(events) do |stream, resource|
+        assert_equal :resource, resource
+        sleep 0.01
+        assert_equal %i[acquired body_start], events
+        stream.write("chunk")
+        raise error, "failure" if error
+      end
+
+      Async do
+        body = app.call(Rack::MockRequest.env_for("/stream"))[2]
+        sleep 0.01
+        assert_equal [:acquired], events
+        stream = StringIO.new
+        if error == RuntimeError
+          assert_raises(RuntimeError) { body.call(stream) }
+        else
+          body.call(stream)
+        end
+        assert stream.closed?
+        body.close
+        body.close
+      end.wait
+
+      assert_equal %i[acquired body_start body_end background released], events
+    end
+  end
+
+  def test_unconsumed_close_outside_original_reactor
+    events = []
+    app = managed_stream(events) { flunk "unconsumed body must not run" }
+    body = Async { app.call(Rack::MockRequest.env_for("/stream"))[2] }.wait
+    assert_equal [:acquired], events
+    body.close
+    body.close
+    assert_equal %i[acquired background released], events
+  end
+
+  def test_cancelled_stream_finishes_background_and_yielding_cleanup
+    events = []
+    app = managed_stream(events) { sleep 10 }
+    Async do |task|
+      body = app.call(Rack::MockRequest.env_for("/stream"))[2]
+      consumer = task.async { body.call(StringIO.new) }
+      assert_equal %i[acquired body_start], events
+      consumer.stop
+      body.close
+    end.wait
+    assert_equal %i[acquired body_start body_end background released], events
+  end
+
+  def test_completion_body_preserves_capabilities_and_finalizes_enumeration
+    events = []
+    original = Object.new
+    original.define_singleton_method(:each) do |&block|
+      block.call("one")
+      block.call("two")
+    end
+    original.define_singleton_method(:to_path) { "/example/file" }
+    original.define_singleton_method(:close) { events << :closed }
+    body = FunApi::StreamingResponse::CompletionBody.new(original) { events << :complete }
+    assert body.respond_to?(:each)
+    refute body.respond_to?(:call)
+    refute body.respond_to?(:to_ary)
+    assert_equal "/example/file", body.to_path
+    assert_equal ["one", "two"], body.each.to_a
+    body.close
+    assert_equal %i[closed complete], events
+
+    events.clear
+    body = FunApi::StreamingResponse::CompletionBody.new(original) { events << :complete }
+    assert_raises(Errno::EPIPE) { body.each { raise Errno::EPIPE } }
+    body.close
+    assert_equal %i[closed complete], events
+  end
+
+  def test_completion_body_preserves_array_conversion_and_callable_shape
+    events = []
+    body = FunApi::StreamingResponse::CompletionBody.new(["hello"]) { events << :complete }
+    assert_equal ["hello"], body.to_ary
+    body.close
+    assert_equal [:complete], events
+
+    original = FunApi::StreamingResponse.new { |stream| stream.write("hello") }.to_response[2]
+    body = FunApi::StreamingResponse::CompletionBody.new(original) {}
+    assert body.respond_to?(:call)
+    refute body.respond_to?(:each)
+    refute body.respond_to?(:to_path)
+    refute body.respond_to?(:to_ary)
+  end
+
+  def test_completion_waits_for_yielding_close_and_runs_even_if_close_fails
+    events = []
+    original = Object.new
+    original.define_singleton_method(:close) do
+      events << :closing
+      sleep 0.01
+      events << :closed
+      raise "close failed"
+    end
+    body = FunApi::StreamingResponse::CompletionBody.new(original) { events << :complete }
+    Async do |task|
+      closer = task.async { assert_raises(RuntimeError) { body.close } }
+      body.close
+      assert_equal [:closing], events
+      closer.wait
+      body.close
+    end.wait
+    assert_equal %i[closing closed complete], events
+  end
+
   def drive(app, path, **options)
     env = Rack::MockRequest.env_for(path, **options)
     status, headers, body = Async { app.call(env) }.wait
