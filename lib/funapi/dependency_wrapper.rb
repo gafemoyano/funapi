@@ -79,15 +79,21 @@ module FunApi
       return @resource if @fiber
 
       @fiber = Fiber.new do
+        set_current_task(@resuming_task)
         result = nil
         @block.call(proc { |resource|
           result = resource
+          set_current_task(nil)
           Fiber.yield resource
+          set_current_task(@resuming_task)
+          nil
         })
         result
+      ensure
+        set_current_task(nil)
       end
 
-      @resource = @fiber.resume
+      @resource = resume
       @resource
     end
 
@@ -95,8 +101,25 @@ module FunApi
       return if !@fiber || @cleaned
 
       @cleaned = true
-      @fiber.resume if @fiber.alive?
+      resume if @fiber.alive?
     rescue FiberError
+    end
+
+    private
+
+    def resume
+      @resuming_task = Async::Task.current?
+      @fiber.resume
+    ensure
+      @resuming_task = nil
+    end
+
+    def set_current_task(task)
+      if Fiber.current.respond_to?(:async_task=)
+        Fiber.current.async_task = task
+      else
+        Thread.current[:async_task] = task
+      end
     end
   end
 end

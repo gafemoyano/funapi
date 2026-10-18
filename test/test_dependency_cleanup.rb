@@ -9,6 +9,55 @@ class TestDependencyCleanup < Minitest::Test
     end.wait
   end
 
+  def test_block_provider_async_work_uses_each_resuming_task
+    [false, true].each do |new_reactor|
+      events = []
+      expected_task = nil
+      app = FunApi::App.new do |api|
+        api.register(:resource) do |provide|
+          assert_same expected_task, Async::Task.current
+          assert_same expected_task, FunApi.current_task
+          FunApi.async do |child|
+            assert_same expected_task, child.parent
+            sleep 0.001
+            events << :acquired
+          end.wait
+          provide.call(:resource)
+        ensure
+          assert_same expected_task, Async::Task.current
+          assert_same expected_task, FunApi.current_task
+          assert FunApi.current_task.running?
+          FunApi.async do |child|
+            assert_same expected_task, child.parent
+            sleep 0.001
+            events << :cleaned
+          end.wait
+        end
+      end
+      resource = app.resolve(:resource)
+
+      acquisition_task = Async do |task|
+        expected_task = task
+        assert_equal :resource, resource.call
+        resource.cleanup unless new_reactor
+      end
+      acquisition_task.wait
+
+      if new_reactor
+        refute acquisition_task.running?
+        assert_equal [:acquired], events
+        Async do |task|
+          refute_same acquisition_task, task
+          expected_task = task
+          resource.cleanup
+        end.wait
+      end
+
+      resource.cleanup
+      assert_equal [:acquired, :cleaned], events
+    end
+  end
+
   def test_partial_resolution_unwinds_before_preserving_http_error
     events = []
     original = FunApi::HTTPException.new(status_code: 401, detail: "original authentication failure")
