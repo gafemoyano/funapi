@@ -157,6 +157,64 @@ class TestSequelIntegration < Minitest::Test
     end
   end
 
+  def test_cancelled_connection_setup_closes_physical_connections
+    connections = []
+    ready = Async::Queue.new
+    cancel = true
+    with_db(test: false, max_connections: 1, after_connect: ->(connection) {
+      connections << connection
+      if cancel
+        ready.enqueue(true)
+        Async::Task.current.sleep(60)
+      end
+    }) do |db|
+      3.times do
+        error = nil
+        connector = Async::Task.current.async do
+          db.synchronize { flunk "cancelled setup completed" }
+        rescue Sequel::DatabaseConnectionError => exception
+          error = exception
+        end
+        ready.dequeue
+        connector.stop
+        connector.wait
+        assert_instance_of Async::Stop, error.wrapped_exception
+        assert connections.all?(&:finished?), "cancelled setup leaked a PostgreSQL connection"
+        assert_equal 0, db.pool.size
+      end
+      cancel = false
+      assert_equal 42, db.get(Sequel.lit("42"))
+      refute connections.last.finished?
+      assert_equal 1, db.pool.size
+    end
+    assert connections.all?(&:finished?)
+  ensure
+    connections&.each { |connection| connection.finish unless connection.finished? }
+  end
+
+  def test_failed_connection_setup_closes_connection_and_preserves_error
+    connection = nil
+    original = RuntimeError.new("setup failed")
+    hook_called = false
+    server_name = nil
+    with_db(test: false, max_connections: 1,
+      before_preconnect: ->(_db) { hook_called = true },
+      after_connect: ->(created, server) {
+        connection = created
+        server_name = server
+        raise original
+      }) do |db|
+      error = assert_raises(Sequel::DatabaseConnectionError) { db.synchronize { flunk "failed setup completed" } }
+      assert_same original, error.wrapped_exception
+      assert hook_called
+      assert_equal :default, server_name
+      assert connection.finished?, "failed setup leaked a PostgreSQL connection"
+      assert_equal 0, db.pool.size
+    end
+  ensure
+    connection.finish if connection && !connection.finished?
+  end
+
   def test_concurrent_queries_through_pool
     with_db do |db|
       results = Async do |task|
