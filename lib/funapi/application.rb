@@ -320,7 +320,7 @@ module FunApi
 
     def handle_async_route(req, path_params, path_schema, body_schema, query_schema, response_schema, dependencies, &blk)
       current_task = Async::Task.current
-      cleanup_objects = []
+      cleanup_objects = CleanupRegistry.new
       background_tasks = BackgroundTasks.new(current_task)
       deferred = false
 
@@ -338,7 +338,7 @@ module FunApi
 
         input[:body] = Schema.validate(body_schema, input[:body], location: "body") if body_schema
 
-        resolved_deps, cleanup_objects = resolve_dependencies(dependencies, input, req, current_task)
+        resolved_deps = resolve_dependencies(dependencies, input, req, current_task, cleanup_objects)
 
         # standard:disable Style/HashSlice
         handler_params = blk.parameters.select { |type, _| %i[keyreq key].include?(type) }.map(&:last)
@@ -404,11 +404,7 @@ module FunApi
     end
 
     def run_cleanup(cleanup_objects)
-      cleanup_objects.each do |wrapper|
-        wrapper.cleanup
-      rescue => e
-        warn "Dependency cleanup failed: #{e.message}"
-      end
+      cleanup_objects.cleanup
     end
 
     def handle_exception(error, req)
@@ -694,20 +690,20 @@ module FunApi
       normalized
     end
 
-    def resolve_dependencies(dependencies, input, req, task)
-      return [{}, []] if dependencies.nil? || dependencies.empty?
+    def resolve_dependencies(dependencies, input, req, task, cleanup_objects)
+      return {} if dependencies.nil? || dependencies.empty?
 
       cache = {}
-      cleanup_objects = []
 
       context = {
         input: input,
         req: req,
         task: task,
-        container: @container
+        container: @container,
+        cleanup_registry: cleanup_objects
       }
 
-      resolved = dependencies.each_with_object({}) do |(dep_name, dep_info), acc|
+      dependencies.each_with_object({}) do |(dep_name, dep_info), acc|
         override = dependency_override(dep_name, dep_info)
 
         acc[dep_name] = if override
@@ -715,25 +711,12 @@ module FunApi
         else
           case dep_info[:type]
           when :container
-            cache_key = "container:#{dep_info[:key]}"
-            if cache.key?(cache_key)
-              cache[cache_key][:resource]
-            else
-              dependency_wrapper = @container.resolve(dep_info[:key])
-              resource = dependency_wrapper.call
-              cache[cache_key] = {resource: resource, wrapper: dependency_wrapper}
-              cleanup_objects << dependency_wrapper
-              resource
-            end
+            cleanup_objects.resolve_container(@container, dep_info[:key], cache)
           when :depends
-            result, cleanup = dep_info[:callable].call(context, cache)
-            cleanup_objects << ManagedDependency.new(result, cleanup) if cleanup
-            result
+            dep_info[:callable].call(context, cache).first
           end
         end
       end
-
-      [resolved, cleanup_objects]
     rescue HTTPException
       raise
     rescue => e
