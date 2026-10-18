@@ -50,7 +50,7 @@ end
 ### Dockerfile
 
 ```dockerfile
-FROM ruby:3.2-alpine
+FROM ruby:3.3-alpine
 
 RUN apk add --no-cache build-base
 

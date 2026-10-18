@@ -13,7 +13,7 @@ FunApi is a minimal, async-first Ruby web framework inspired by FastAPI. This fi
 - Automatic OpenAPI/Swagger documentation
 - Rack-compatible middleware system
 
-**Target Ruby Version**: >= 3.2.0
+**Target Ruby Version**: >= 3.3.2
 
 ## Setup Commands
 
@@ -59,7 +59,7 @@ ruby examples/demo_middleware.rb
 ## Code Style Guidelines
 
 **Linter**: Standard Ruby (standardrb)
-- Ruby version: 3.2 (configured in `.standard.yml`)
+- Ruby version: 3.3 (configured in `.standard.yml`)
 - **IMPORTANT**: DO NOT add comments unless explicitly requested
 - Follow Standard Ruby formatting automatically
 

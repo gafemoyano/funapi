@@ -14,6 +14,11 @@ FunApi aims to bring FastAPI's excellent developer experience to Ruby by providi
 
 ## Installation
 
+Requires Ruby **3.3.2 or newer** and Rack **3.0.3 or newer** (below 4).
+Use the latest patch release of a supported Ruby series. Earlier Rubies do not
+reliably cancel suspended dependency providers; Ruby 3.3.2 includes the
+[upstream fiber cancellation fix](https://bugs.ruby-lang.org/issues/20414).
+
 Add this line to your application's Gemfile:
 
 ```ruby

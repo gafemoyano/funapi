@@ -16,10 +16,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ruby: ['3.2', '3.3', '3.4', '4.0']
+        ruby: ['3.3', '3.4', '4.0']
         dependencies: [latest]
         include:
-          - ruby: '3.2.0'
+          - ruby: '3.3.2'
             dependencies: minimum
 
     steps:
@@ -43,7 +43,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - ruby: '3.2.0'
+          - ruby: '3.3.2'
             dependencies: minimum
           - ruby: '4.0'
             dependencies: latest

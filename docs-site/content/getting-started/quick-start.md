@@ -8,6 +8,11 @@ Get a FunApi application running in under 5 minutes.
 
 ## Installation
 
+Requires Ruby **3.3.2 or newer** and Rack **3.0.3 or newer** (below 4).
+Use a current Ruby patch release. Ruby 3.3.2 fixes
+[cancellation through nested fibers](https://bugs.ruby-lang.org/issues/20414),
+which FunApi needs when cancelling dependency providers.
+
 Add FunApi to your Gemfile:
 
 ```ruby
