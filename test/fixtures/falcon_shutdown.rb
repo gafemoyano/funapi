@@ -15,7 +15,17 @@ handlers = %i[INT TERM].to_h do |signal|
   [signal, handler]
 end
 
+resource_events = []
 app = FunApi::App.new do |api|
+  api.register(:resource) do
+    resource_events << :acquired
+    [:resource, -> {
+      sleep 0.1
+      resource_events << :released
+      puts "dependency released"
+    }]
+  end
+
   api.get "/request" do
     Async::Task.current.defer_stop do
       puts "request active"
@@ -32,7 +42,13 @@ app = FunApi::App.new do |api|
     puts "request closed"
   end
 
-  api.get "/stream" do
+  api.get "/stream", depends: [:resource] do |_input, _request, _task, resource:, background:|
+    raise "wrong dependency" unless resource == :resource
+    background.add_task(-> {
+      sleep 0.1
+      resource_events << :background
+      puts "background completed"
+    })
     FunApi::StreamingResponse.new do |stream|
       stream.write("first\n")
       puts "stream active"
@@ -44,6 +60,9 @@ app = FunApi::App.new do |api|
   end
 
   api.on_shutdown do
+    if mode == "stream" && resource_events != %i[acquired background released]
+      raise "shutdown before dependency cleanup: #{resource_events.inspect}"
+    end
     begin
       TCPSocket.new("127.0.0.1", port).close
       raise "listener still open"

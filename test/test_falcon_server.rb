@@ -20,7 +20,12 @@ class TestFalconServer < Minitest::Test
 
       if mode == "stream"
         assert_equal 1, output.lines.count { |line| line.chomp == "stream closed" }, output
-        assert_operator output.index("stream closed"), :<, output.index("hook started"), output
+        ["background completed", "dependency released"].each do |event|
+          assert_equal 1, output.lines.count { |line| line.chomp == event }, output
+        end
+        assert_operator output.index("stream closed"), :<, output.index("background completed"), output
+        assert_operator output.index("background completed"), :<, output.index("dependency released"), output
+        assert_operator output.index("dependency released"), :<, output.index("hook started"), output
         assert_includes output, "Shutdown hook failed: intentional hook failure"
       end
       if %w[request drain].include?(mode)
