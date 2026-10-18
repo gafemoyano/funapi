@@ -27,6 +27,7 @@ module FunApi
       @container = Dry::Container.new
       @startup_hooks = []
       @shutdown_hooks = []
+      @post_response_tasks = []
       @exception_handlers = {}
       @dependency_overrides = {}
       @openapi_config = {
@@ -59,6 +60,8 @@ module FunApi
     end
 
     def run_shutdown_hooks
+      @post_response_tasks.first.wait until @post_response_tasks.empty?
+
       @shutdown_hooks.each do |hook|
         hook.call
       rescue => e
@@ -404,10 +407,14 @@ module FunApi
         ensure
           run_cleanup(cleanup_objects)
         end
+      ensure
+        @post_response_tasks.delete(post_task)
       end
 
       if Fiber.scheduler
-        Async::Task.new(Fiber.scheduler, &finalize).run
+        post_task = Async::Task.new(Fiber.scheduler, &finalize)
+        @post_response_tasks << post_task
+        post_task.run
       else
         Async(&finalize).wait
       end

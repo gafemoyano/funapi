@@ -71,14 +71,54 @@ class TestStreaming < Minitest::Test
   def test_cancelled_stream_finishes_background_and_yielding_cleanup
     events = []
     app = managed_stream(events) { sleep 10 }
+    app.on_shutdown do
+      assert_equal %i[acquired body_start body_end background released], events
+      events << :shutdown
+    end
     Async do |task|
       body = app.call(Rack::MockRequest.env_for("/stream"))[2]
       consumer = task.async { body.call(StringIO.new) }
       assert_equal %i[acquired body_start], events
       consumer.stop
       body.close
+      app.run_shutdown_hooks
     end.wait
-    assert_equal %i[acquired body_start body_end background released], events
+    assert_equal %i[acquired body_start body_end background released shutdown], events
+  end
+
+  def test_shutdown_without_hooks_drains_failed_background_and_cleanup
+    events = []
+    app = FunApi::App.new do |api|
+      api.register(:resource) do
+        [:resource, -> {
+          sleep 0.01
+          events << :cleanup
+          raise "cleanup failed"
+        }]
+      end
+      api.get "/stream", depends: [:resource] do |_input, _req, _task, resource:, background:|
+        background.add_task(-> {
+          sleep 0.01
+          events << :background
+          raise "background failed"
+        })
+        FunApi::StreamingResponse.new { |stream| stream.write(resource.to_s) }
+      end
+    end
+
+    _output, warnings = capture_io do
+      Async do |task|
+        task.with_timeout(1) do
+          body = app.call(Rack::MockRequest.env_for("/stream"))[2]
+          body.close
+          app.run_shutdown_hooks
+          assert_equal %i[background cleanup], events
+          app.run_shutdown_hooks
+        end
+      end.wait
+    end
+    assert_includes warnings, "background failed"
+    assert_includes warnings, "cleanup failed"
   end
 
   def test_completion_body_preserves_capabilities_and_finalizes_enumeration
