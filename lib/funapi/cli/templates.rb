@@ -92,8 +92,8 @@ module FunApi
 
           # Database (optional): FunApi blesses Sequel with a fibered pool.
           # Uncomment and run `bundle install` to use Postgres.
-          # gem "sequel"
-          # gem "pg"
+          # gem "sequel", "~> 5.0", ">= 5.63"
+          # gem "pg", ">= 1.3"
 
           group :development, :test do
             gem "minitest"
