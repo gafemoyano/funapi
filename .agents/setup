@@ -26,8 +26,10 @@ mise trust "$repo_root/docs-site/mise.toml"
 time mise install ruby
 
 profile_marker='# FunApi orb toolchain'
-if ! grep -Fqx "$profile_marker" "$HOME/.bash_profile" 2>/dev/null; then
-  cat >> "$HOME/.bash_profile" <<EOF
+if [[ -f "$HOME/.bash_profile" ]]; then
+  sed -i '/^# FunApi orb toolchain$/,/^esac$/d' "$HOME/.bash_profile"
+fi
+cat >> "$HOME/.bash_profile" <<EOF
 
 $profile_marker
 case "\$PWD" in
@@ -40,7 +42,6 @@ case "\$PWD" in
     ;;
 esac
 EOF
-fi
 
 bundler_version="$(awk '/^BUNDLED WITH$/{getline; print $1}' Gemfile.lock)"
 if ! mise exec ruby -- gem list --installed --exact bundler --version "$bundler_version" >/dev/null; then
