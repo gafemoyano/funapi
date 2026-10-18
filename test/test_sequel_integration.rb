@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "async/queue"
 
 begin
   require "funapi/sequel"
@@ -55,9 +56,9 @@ class TestSequelIntegration < Minitest::Test
     end
   end
 
-  def with_db
+  def with_db(**options)
     Async do
-      db = FunApi::Sequel.connect(self.class.db_url, max_connections: 5)
+      db = FunApi::Sequel.connect(self.class.db_url, max_connections: 5, **options)
       begin
         yield db
       ensure
@@ -66,10 +67,89 @@ class TestSequelIntegration < Minitest::Test
     end.wait
   end
 
-  def test_connect_uses_fibered_pool
+  def test_connect_uses_timed_queue_pool
     with_db do |db|
-      assert_instance_of Sequel::FiberedConnectionPool, db.pool
+      assert_instance_of Sequel::TimedQueueConnectionPool, db.pool
       assert_equal 1, db["SELECT 1 AS one"].first[:one]
+    end
+  end
+
+  def test_transactions_commit_and_rollback_on_the_same_connection
+    with_db(max_connections: 1, pool_timeout: 0.05) do |db|
+      db.create_table!(:pool_transactions) do
+        primary_key :id
+        String :name
+      end
+
+      db.transaction do |connection|
+        db.synchronize { |nested| assert_same connection, nested }
+        db[:pool_transactions].insert(name: "committed")
+        db.transaction(savepoint: true) do
+          db[:pool_transactions].insert(name: "savepoint rollback")
+          raise Sequel::Rollback
+        end
+      end
+
+      assert_raises(RuntimeError) do
+        db.transaction do
+          db[:pool_transactions].insert(name: "outer rollback")
+          raise "rollback"
+        end
+      end
+      assert_equal ["committed"], db[:pool_transactions].select_map(:name)
+    end
+  end
+
+  def test_concurrent_transactions_do_not_share_connections_or_rollback_each_other
+    with_db(max_connections: 2) do |db|
+      db.create_table!(:pool_concurrent_transactions) do
+        primary_key :id
+        String :name
+      end
+      inserted = Async::Queue.new
+      release = Async::Queue.new
+      rollback_pid = nil
+      rollback = Async::Task.current.async do
+        db.transaction do
+          rollback_pid = db.get(Sequel.function(:pg_backend_pid))
+          db[:pool_concurrent_transactions].insert(name: "rolled back")
+          inserted.enqueue(true)
+          release.dequeue
+          raise Sequel::Rollback
+        end
+      end
+      inserted.dequeue
+      db.transaction do
+        refute_equal rollback_pid, db.get(Sequel.function(:pg_backend_pid))
+        assert_empty db[:pool_concurrent_transactions].all
+        db[:pool_concurrent_transactions].insert(name: "survives")
+      end
+      release.enqueue(true)
+      rollback.wait
+      assert_equal ["survives"], db[:pool_concurrent_transactions].select_map(:name)
+    end
+  end
+
+  def test_cancelled_transaction_rolls_back_and_connection_is_reusable
+    with_db(max_connections: 1) do |db|
+      db.create_table!(:pool_cancelled_transactions) do
+        primary_key :id
+        String :name
+      end
+      inserted = Async::Queue.new
+      holder = Async::Task.current.async do |task|
+        db.transaction do
+          db[:pool_cancelled_transactions].insert(name: "cancelled")
+          inserted.enqueue(true)
+          task.sleep(60)
+        end
+      end
+      inserted.dequeue
+      holder.stop
+      assert_empty db[:pool_cancelled_transactions].all
+      db.transaction { db[:pool_cancelled_transactions].insert(name: "reused") }
+      assert_equal ["reused"], db[:pool_cancelled_transactions].select_map(:name)
+      assert_equal 1, db.pool.size
     end
   end
 
