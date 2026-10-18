@@ -555,6 +555,24 @@ end
 - Startup errors prevent server from starting
 - Shutdown errors are logged but don't prevent other hooks from running
 
+**Public Falcon adapter shutdown:** `FunApi::Server::Falcon.start` handles SIGINT
+and SIGTERM by recording a shutdown request; the reactor checks it every 50 ms.
+It stops accepting connections and requests cooperative cancellation of the
+server's tasks. Tasks that defer cancellation get up to one second to finish,
+then receive a second stop request to interrupt the deferral. Active streams
+may be truncated; this is not a guarantee that every response will drain.
+After the server task tree finishes, shutdown hooks run once in the live Async
+reactor, so hooks can await async cleanup. Repeated signals during cleanup do
+not rerun hooks. Prior signal handlers are restored even on failure, and the
+adapter returns without calling `exit`. Shutdown hooks also run when startup
+fails, to clean up partially initialized resources.
+
+Cancellation is cooperative: non-yielding code, code that suppresses
+cancellation, and indefinitely blocked cleanup hooks can still prevent shutdown.
+The one-second grace period is not a hard process-exit deadline. Signal handlers
+are process-wide; run only one public adapter at a time. This policy does not
+change the CLI reloader.
+
 **Use cases:**
 - Database connection pool initialization
 - Cache warming
