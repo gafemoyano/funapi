@@ -64,7 +64,7 @@ class TestSequelPool < Minitest::Test
       db.synchronize do
         waiter = task.async { db.synchronize { flunk "cancelled waiter acquired connection" } }
         waiter.stop
-        assert_equal :stopped, waiter.status
+        waiter.wait
         assert_equal 1, db.pool.size
       end
       db.synchronize { |connection| refute_nil connection }

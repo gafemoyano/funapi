@@ -16,15 +16,17 @@ Gemfile:
 ```ruby
 # Gemfile
 gem "funapi"
-gem "sequel"
-gem "pg"
+gem "sequel", "~> 5.0", ">= 5.63"
+gem "pg", ">= 1.3"
 ```
 
 ## FunApi::Sequel.connect
 
-`require "funapi/sequel"` and connect. The returned `Sequel::Database` uses the
-`FiberedConnectionPool`, which checks connections in and out cooperatively so
-concurrent requests share the pool without blocking the reactor:
+`require "funapi/sequel"` at boot and connect. This enables Sequel's global
+`fiber_concurrency` extension, making connection ownership fiber-local. The
+returned `Sequel::Database` uses Sequel's maintained `timed_queue` pool, requiring
+Sequel >= 5.63 and Ruby >= 3.2. Concurrent requests share the pool without
+blocking the reactor, and nested checkouts in the same fiber reuse a connection:
 
 ```ruby
 require "funapi"
@@ -52,7 +54,10 @@ end
 ```
 
 `max_connections` caps the pool. Size it to match your bounded concurrency (see
-[Best Practices](/patterns/best-practices)).
+[Best Practices](/patterns/best-practices)). Connections being established count
+toward this limit. `pool_timeout` limits the wait for an available connection and
+raises `Sequel::PoolTimeout` on exhaustion; it does not limit connection setup or
+query execution time.
 
 ## Concurrent Queries
 
@@ -141,7 +146,9 @@ end
 
 ## Lifecycle
 
-Open the pool at boot and disconnect on shutdown:
+Open the pool at boot and disconnect on shutdown, after database users have
+finished. `disconnect` closes idle connections; it does not cancel active users
+or connection creation, and active connections can return to the pool afterward:
 
 ```ruby
 app = FunApi::App.new do |api|

@@ -671,7 +671,7 @@ FunApi::Server::Falcon.start(app, port: 9292)
 - **dry-schema** (>= 1.13): Schema validation
 - **falcon** (>= 0.44): High-performance async HTTP server
 
-For the database path, add `sequel` and a driver (e.g. `pg` >= 1.3) to your own Gemfile and `require "funapi/sequel"`.
+For the optional database path, add `gem "sequel", "~> 5.0", ">= 5.63"` and a driver (e.g. `pg` >= 1.3) to your own Gemfile and `require "funapi/sequel"` at boot. This enables Sequel's global `fiber_concurrency` extension and uses its maintained `timed_queue` pool (Ruby >= 3.2).
 
 ## Design Goals
 
