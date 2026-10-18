@@ -24,6 +24,6 @@ module FunApi
   end
 
   def self.current_task
-    Fiber[:async_task] || Async::Task.current
+    Async::Task.current
   end
 end

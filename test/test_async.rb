@@ -1,8 +1,101 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "async/queue"
+require "stringio"
 
 class TestAsync < Minitest::Test
+  def nested_task_observations
+    context = Async::Task.current
+    ready = Async::Queue.new
+    blocked = Async::Queue.new
+    observations = {context_current: FunApi.current_task.equal?(context)}
+    inner = nil
+    outer = FunApi.async do |task|
+      observations[:outer_current] = FunApi.current_task.equal?(task)
+      nested = FunApi.async do |child|
+        observations[:inner_current] = FunApi.current_task.equal?(child)
+        ready.enqueue(child)
+        blocked.dequeue
+      ensure
+        observations[:inner_finished] = true
+      end
+      nested.wait
+    end
+    inner = ready.dequeue
+    observations[:outer_parent] = outer.parent.equal?(context)
+    observations[:inner_parent] = inner.parent.equal?(outer)
+    outer.stop
+    observations[:inner_stopped] = inner.stopped?
+    observations[:cancelled_with_outer] = observations[:inner_finished] == true
+    observations[:context_running] = context.running?
+    observations
+  ensure
+    outer&.stop
+    inner&.stop
+  end
+
+  def assert_nested_task_observations(observations)
+    refute_nil observations
+    %i[context_current outer_current inner_current outer_parent inner_parent inner_stopped cancelled_with_outer context_running].each do |key|
+      assert_equal true, observations[key], key.to_s
+    end
+  end
+
+  def test_helpers_parent_and_cancel_nested_tasks_in_handler
+    observations = nil
+    app = FunApi::App.new do |api|
+      api.get "/nested" do |_input, _req, task|
+        observations = nested_task_observations
+        [{legacy_task_current: task.equal?(Async::Task.current)}, 200]
+      end
+    end
+
+    response = async_request(app, :get, "/nested")
+
+    assert_equal 200, response.status
+    assert_equal true, parse(response)[:legacy_task_current]
+    assert_nested_task_observations(observations)
+  end
+
+  def test_helpers_parent_and_cancel_nested_tasks_in_stream
+    observations = nil
+    app = FunApi::App.new do |api|
+      api.get "/stream" do
+        FunApi::StreamingResponse.new do |stream|
+          observations = nested_task_observations
+          stream.write("done")
+        end
+      end
+    end
+
+    stream = StringIO.new
+    Async do |task|
+      status, _headers, body = app.call(Rack::MockRequest.env_for("/stream"))
+      assert_equal 200, status
+      task.async { body.call(stream) }.wait
+    end.wait
+
+    assert_equal "done", stream.string
+    assert stream.closed?
+    assert_nested_task_observations(observations)
+  end
+
+  def test_helpers_parent_and_cancel_nested_tasks_in_background
+    observations = nil
+    app = FunApi::App.new do |api|
+      api.get "/background" do |_input, _req, _task, background:|
+        background.add_task(-> { observations = nested_task_observations })
+        [{ok: true}, 200]
+      end
+    end
+
+    response = async_request(app, :get, "/background")
+
+    assert_equal 200, response.status
+    assert_nested_task_observations(observations)
+  end
+
   def async_request(app, method, path, **options)
     Async do
       Rack::MockRequest.new(app).send(method, path, **options)

@@ -320,7 +320,6 @@ module FunApi
 
     def handle_async_route(req, path_params, path_schema, body_schema, query_schema, response_schema, dependencies, &blk)
       current_task = Async::Task.current
-      Fiber[:async_task] = current_task
       cleanup_objects = []
       background_tasks = BackgroundTasks.new(current_task)
       deferred = false
@@ -373,13 +372,10 @@ module FunApi
         handle_exception(e, req)
       ensure
         run_cleanup(cleanup_objects) unless deferred
-        Fiber[:async_task] = nil
       end
     end
 
     def handle_websocket_route(req, path_params, path_schema, query_schema, &blk)
-      Fiber[:async_task] = Async::Task.current
-
       input = {
         path: path_params.transform_keys(&:to_sym),
         query: req.GET,
@@ -396,8 +392,6 @@ module FunApi
       response || FunApi::WebSocket.upgrade_required
     rescue => e
       handle_exception(e, req)
-    ensure
-      Fiber[:async_task] = nil
     end
 
     def schedule_post_response(task, background_tasks, cleanup_objects)
