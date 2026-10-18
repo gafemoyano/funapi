@@ -27,6 +27,10 @@ class TestSequelIntegration < Minitest::Test
   end
 
   def setup
+    if ENV["REQUIRE_DATABASE"] == "1"
+      flunk "sequel is required" unless SEQUEL_AVAILABLE
+      flunk "DATABASE_URL is required" if ENV.fetch("DATABASE_URL", "").empty?
+    end
     skip "sequel not available" unless SEQUEL_AVAILABLE
     ensure_database
   end

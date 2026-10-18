@@ -3,18 +3,24 @@ name: Ruby
 on:
   push:
     branches:
-      - master
+      - main
 
   pull_request:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: Ruby ${{ matrix.ruby }}
+    name: Ruby ${{ matrix.ruby }} / ${{ matrix.dependencies }}
+    env:
+      BUNDLE_GEMFILE: gemfiles/${{ matrix.dependencies }}.gemfile
     strategy:
+      fail-fast: false
       matrix:
-        ruby:
-          - '3.4.5'
+        ruby: ['3.2', '3.3', '3.4', '4.0']
+        dependencies: [latest]
+        include:
+          - ruby: '3.2.0'
+            dependencies: minimum
 
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +30,53 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
-          bundler-cache: true
+          bundler: latest
+      - name: Resolve dependencies
+        run: bundle update
+      - name: Run the default task
+        run: bundle exec rake
+
+  postgres:
+    runs-on: ubuntu-latest
+    name: PostgreSQL ${{ matrix.dependencies }} (required)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ruby: '3.2.0'
+            dependencies: minimum
+          - ruby: '4.0'
+            dependencies: latest
+    env:
+      BUNDLE_GEMFILE: gemfiles/${{ matrix.dependencies }}.gemfile
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/funapi_test
+      REQUIRE_DATABASE: '1'
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: funapi_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d funapi_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler: latest
+      - name: Resolve dependencies
+        run: bundle update
+      - name: Require PostgreSQL integration tests
+        run: bundle exec ruby -Itest test/test_sequel_integration.rb
       - name: Run the default task
         run: bundle exec rake
