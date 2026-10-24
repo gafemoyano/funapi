@@ -14,6 +14,11 @@ FunApi aims to bring FastAPI's excellent developer experience to Ruby by providi
 
 ## Installation
 
+Requires Ruby **3.3.2 or newer** and Rack **3.0.3 or newer** (below 4).
+Use the latest patch release of a supported Ruby series. Earlier Rubies do not
+reliably cancel suspended dependency providers; Ruby 3.3.2 includes the
+[upstream fiber cancellation fix](https://bugs.ruby-lang.org/issues/20414).
+
 Add this line to your application's Gemfile:
 
 ```ruby
@@ -555,6 +560,24 @@ end
 - Startup errors prevent server from starting
 - Shutdown errors are logged but don't prevent other hooks from running
 
+**Public Falcon adapter shutdown:** `FunApi::Server::Falcon.start` handles SIGINT
+and SIGTERM by recording a shutdown request; the reactor checks it every 50 ms.
+It stops accepting connections and requests cooperative cancellation of the
+server's tasks. Tasks that defer cancellation get up to one second to finish,
+then receive a second stop request to interrupt the deferral. Active streams
+may be truncated; this is not a guarantee that every response will drain.
+After the server task tree finishes, shutdown hooks run once in the live Async
+reactor, so hooks can await async cleanup. Repeated signals during cleanup do
+not rerun hooks. Prior signal handlers are restored even on failure, and the
+adapter returns without calling `exit`. Shutdown hooks also run when startup
+fails, to clean up partially initialized resources.
+
+Cancellation is cooperative: non-yielding code, code that suppresses
+cancellation, and indefinitely blocked cleanup hooks can still prevent shutdown.
+The one-second grace period is not a hard process-exit deadline. Signal handlers
+are process-wide; run only one public adapter at a time. This policy does not
+change the CLI reloader.
+
 **Use cases:**
 - Database connection pool initialization
 - Cache warming
@@ -653,7 +676,7 @@ FunApi::Server::Falcon.start(app, port: 9292)
 - **dry-schema** (>= 1.13): Schema validation
 - **falcon** (>= 0.44): High-performance async HTTP server
 
-For the database path, add `sequel` and a driver (e.g. `pg` >= 1.3) to your own Gemfile and `require "funapi/sequel"`.
+For the optional database path, add `gem "sequel", "~> 5.0", ">= 5.63"` and a driver (e.g. `pg` >= 1.3) to your own Gemfile and `require "funapi/sequel"` at boot. This enables Sequel's global `fiber_concurrency` extension and uses its maintained `timed_queue` pool (Ruby >= 3.2).
 
 ## Design Goals
 

@@ -16,7 +16,13 @@ class TestCLI < Minitest::Test
 
   def run_cli(*args, chdir:)
     env = {"RUBYLIB" => LIB}
-    Open3.capture2e(env, RbConfig.ruby, EXE, *args, chdir: chdir)
+    if args.include?("--json")
+      output, errors, status = Open3.capture3(env, RbConfig.ruby, EXE, *args, chdir: chdir)
+      warn errors unless errors.empty?
+      [output, status]
+    else
+      Open3.capture2e(env, RbConfig.ruby, EXE, *args, chdir: chdir)
+    end
   end
 
   def with_scaffold

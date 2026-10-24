@@ -27,6 +27,7 @@ module FunApi
       @container = Dry::Container.new
       @startup_hooks = []
       @shutdown_hooks = []
+      @post_response_tasks = []
       @exception_handlers = {}
       @dependency_overrides = {}
       @openapi_config = {
@@ -59,6 +60,8 @@ module FunApi
     end
 
     def run_shutdown_hooks
+      @post_response_tasks.first.wait until @post_response_tasks.empty?
+
       @shutdown_hooks.each do |hook|
         hook.call
       rescue => e
@@ -320,8 +323,7 @@ module FunApi
 
     def handle_async_route(req, path_params, path_schema, body_schema, query_schema, response_schema, dependencies, &blk)
       current_task = Async::Task.current
-      Fiber[:async_task] = current_task
-      cleanup_objects = []
+      cleanup_objects = CleanupRegistry.new
       background_tasks = BackgroundTasks.new(current_task)
       deferred = false
 
@@ -339,7 +341,7 @@ module FunApi
 
         input[:body] = Schema.validate(body_schema, input[:body], location: "body") if body_schema
 
-        resolved_deps, cleanup_objects = resolve_dependencies(dependencies, input, req, current_task)
+        resolved_deps = resolve_dependencies(dependencies, input, req, current_task, cleanup_objects)
 
         # standard:disable Style/HashSlice
         handler_params = blk.parameters.select { |type, _| %i[keyreq key].include?(type) }.map(&:last)
@@ -364,7 +366,9 @@ module FunApi
         end
 
         unless background_tasks.empty? && cleanup_objects.empty?
-          schedule_post_response(current_task, background_tasks, cleanup_objects)
+          response[2] = StreamingResponse::CompletionBody.new(response[2]) do
+            schedule_post_response(background_tasks, cleanup_objects)
+          end
           deferred = true
         end
 
@@ -373,13 +377,10 @@ module FunApi
         handle_exception(e, req)
       ensure
         run_cleanup(cleanup_objects) unless deferred
-        Fiber[:async_task] = nil
       end
     end
 
     def handle_websocket_route(req, path_params, path_schema, query_schema, &blk)
-      Fiber[:async_task] = Async::Task.current
-
       input = {
         path: path_params.transform_keys(&:to_sym),
         query: req.GET,
@@ -396,25 +397,31 @@ module FunApi
       response || FunApi::WebSocket.upgrade_required
     rescue => e
       handle_exception(e, req)
-    ensure
-      Fiber[:async_task] = nil
     end
 
-    def schedule_post_response(task, background_tasks, cleanup_objects)
-      task.async do |post_task|
-        sleep(0)
-        background_tasks.execute
+    def schedule_post_response(background_tasks, cleanup_objects)
+      finalize = proc do |post_task|
+        post_task.defer_stop do
+          post_task.yield
+          background_tasks.execute
+        ensure
+          run_cleanup(cleanup_objects)
+        end
       ensure
-        run_cleanup(cleanup_objects)
+        @post_response_tasks.delete(post_task)
+      end
+
+      if Fiber.scheduler
+        post_task = Async::Task.new(Fiber.scheduler, &finalize)
+        @post_response_tasks << post_task
+        post_task.run
+      else
+        Async(&finalize).wait
       end
     end
 
     def run_cleanup(cleanup_objects)
-      cleanup_objects.each do |wrapper|
-        wrapper.cleanup
-      rescue => e
-        warn "Dependency cleanup failed: #{e.message}"
-      end
+      cleanup_objects.cleanup
     end
 
     def handle_exception(error, req)
@@ -700,20 +707,20 @@ module FunApi
       normalized
     end
 
-    def resolve_dependencies(dependencies, input, req, task)
-      return [{}, []] if dependencies.nil? || dependencies.empty?
+    def resolve_dependencies(dependencies, input, req, task, cleanup_objects)
+      return {} if dependencies.nil? || dependencies.empty?
 
       cache = {}
-      cleanup_objects = []
 
       context = {
         input: input,
         req: req,
         task: task,
-        container: @container
+        container: @container,
+        cleanup_registry: cleanup_objects
       }
 
-      resolved = dependencies.each_with_object({}) do |(dep_name, dep_info), acc|
+      dependencies.each_with_object({}) do |(dep_name, dep_info), acc|
         override = dependency_override(dep_name, dep_info)
 
         acc[dep_name] = if override
@@ -721,25 +728,12 @@ module FunApi
         else
           case dep_info[:type]
           when :container
-            cache_key = "container:#{dep_info[:key]}"
-            if cache.key?(cache_key)
-              cache[cache_key][:resource]
-            else
-              dependency_wrapper = @container.resolve(dep_info[:key])
-              resource = dependency_wrapper.call
-              cache[cache_key] = {resource: resource, wrapper: dependency_wrapper}
-              cleanup_objects << dependency_wrapper
-              resource
-            end
+            cleanup_objects.resolve_container(@container, dep_info[:key], cache)
           when :depends
-            result, cleanup = dep_info[:callable].call(context, cache)
-            cleanup_objects << ManagedDependency.new(result, cleanup) if cleanup
-            result
+            dep_info[:callable].call(context, cache).first
           end
         end
       end
-
-      [resolved, cleanup_objects]
     rescue HTTPException
       raise
     rescue => e

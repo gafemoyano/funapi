@@ -17,6 +17,54 @@ module FunApi
       [@status, headers, Body.new(@block)]
     end
 
+    class CompletionBody
+      def initialize(body, &completion)
+        @body = body
+        @completion = completion
+        @closed = false
+        @consuming = false
+
+        %i[each call to_ary].each do |method|
+          next unless body.respond_to?(method)
+
+          define_singleton_method(method) do |*args, &block|
+            return enum_for(:each) if method == :each && !block
+            return if @closed
+
+            @consuming = true
+            begin
+              @body.public_send(method, *args, &block)
+            ensure
+              @consuming = false
+              close
+            end
+          end
+        end
+
+        if body.respond_to?(:to_path)
+          define_singleton_method(:to_path) { @body.to_path }
+        end
+      end
+
+      def close
+        return if @closing
+
+        @closing = true
+        begin
+          unless @closed
+            @closed = true
+            @body.close if @body.respond_to?(:close)
+          end
+        ensure
+          @closing = false
+          unless @consuming
+            completion, @completion = @completion, nil
+            completion&.call
+          end
+        end
+      end
+    end
+
     class Body
       def initialize(block)
         @block = block

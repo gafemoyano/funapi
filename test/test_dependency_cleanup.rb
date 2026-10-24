@@ -9,6 +9,234 @@ class TestDependencyCleanup < Minitest::Test
     end.wait
   end
 
+  def test_block_provider_async_work_uses_each_resuming_task
+    [false, true].each do |new_reactor|
+      events = []
+      expected_task = nil
+      app = FunApi::App.new do |api|
+        api.register(:resource) do |provide|
+          assert_same expected_task, Async::Task.current
+          assert_same expected_task, FunApi.current_task
+          FunApi.async do |child|
+            assert_same expected_task, child.parent
+            sleep 0.001
+            events << :acquired
+          end.wait
+          provide.call(:resource)
+        ensure
+          assert_same expected_task, Async::Task.current
+          assert_same expected_task, FunApi.current_task
+          assert FunApi.current_task.running?
+          FunApi.async do |child|
+            assert_same expected_task, child.parent
+            sleep 0.001
+            events << :cleaned
+          end.wait
+        end
+      end
+      resource = app.resolve(:resource)
+
+      acquisition_task = Async do |task|
+        expected_task = task
+        assert_equal :resource, resource.call
+        resource.cleanup unless new_reactor
+      end
+      acquisition_task.wait
+
+      if new_reactor
+        refute acquisition_task.running?
+        assert_equal [:acquired], events
+        Async do |task|
+          refute_same acquisition_task, task
+          expected_task = task
+          resource.cleanup
+        end.wait
+      end
+
+      resource.cleanup
+      assert_equal [:acquired, :cleaned], events
+    end
+  end
+
+  def test_partial_resolution_unwinds_before_preserving_http_error
+    events = []
+    original = FunApi::HTTPException.new(status_code: 401, detail: "original authentication failure")
+    app = FunApi::App.new do |api|
+      api.register(:first) { ["first", -> { events << :first }] }
+      api.register(:second) do |provide|
+        provide.call("second")
+      ensure
+        sleep 0
+        events << :second
+        raise "cleanup failure"
+      end
+      api.get "/test", depends: {
+        first: :first,
+        nested: FunApi.Depends(->(second:) { raise original }, second: :second)
+      } do
+        flunk "Handler must not run after failed resolution"
+      end
+    end
+
+    _, warnings = capture_io do
+      response = async_request(app, :get, "/test")
+      assert_equal 401, response.status
+      assert_equal original.detail, JSON.parse(response.body)["detail"]
+    end
+    assert_match "cleanup failure", warnings
+    assert_equal [:second, :first], events
+  end
+
+  def test_nested_only_resources_and_shared_dependencies_unwind_once_per_request
+    [false, true].each do |direct_first|
+      events = []
+      shared = FunApi.Depends(->(resource:) {
+        events << :acquire_shared
+        [resource, -> { events << :release_shared }]
+      }, resource: :resource)
+      outer = FunApi.Depends(->(shared:) {
+        events << :acquire_outer
+        [shared, -> { events << :release_outer }]
+      }, shared: shared)
+      app = FunApi::App.new do |api|
+        api.register(:resource) do |provide|
+          events << :acquire_resource
+          provide.call(Object.new)
+        ensure
+          events << :release_resource
+        end
+        dependencies = {outer: outer, shared: shared, alias: shared}
+        dependencies = {direct: :resource}.merge(dependencies) if direct_first
+        api.get "/test", depends: dependencies do |_input, _req, _task, **resolved|
+          assert_same resolved[:outer], resolved[:shared]
+          assert_same resolved[:shared], resolved[:alias]
+          assert_same resolved[:direct], resolved[:outer] if direct_first
+          [{ok: true}, 200]
+        end
+      end
+
+      2.times do
+        response = async_request(app, :get, "/test")
+        assert_equal 200, response.status
+      end
+      assert_equal [:acquire_resource, :acquire_shared, :acquire_outer,
+        :release_outer, :release_shared, :release_resource] * 2, events
+    end
+  end
+
+  def test_nested_then_direct_container_resource_is_shared
+    acquisitions = 0
+    cleanups = 0
+    app = FunApi::App.new do |api|
+      api.register(:resource) do
+        acquisitions += 1
+        [Object.new, -> { cleanups += 1 }]
+      end
+      api.get "/test", depends: {
+        nested: FunApi.Depends(->(resource:) { resource }, resource: :resource),
+        direct: :resource
+      } do |_input, _req, _task, nested:, direct:|
+        assert_same nested, direct
+        raise FunApi::HTTPException.new(status_code: 403, detail: "handler failed")
+      end
+    end
+
+    response = async_request(app, :get, "/test")
+    assert_equal 403, response.status
+    assert_equal 1, acquisitions
+    assert_equal 1, cleanups
+  end
+
+  def test_cancellation_during_resolution_or_handler_unwinds_yielding_cleanups
+    [:inline, :container, :handler].each do |cancel_at|
+      events = []
+      app = FunApi::App.new do |api|
+        api.register(:resource) do |provide|
+          events << :acquired
+          provide.call("resource")
+        ensure
+          events << :cleanup_started
+          sleep 0.001
+          events << :cleanup_finished
+        end
+        blocker = -> {
+          events << :blocked
+          sleep 60
+        }
+        api.register(:blocker, &blocker)
+        dependencies = {resource: :resource}
+        dependencies[:blocker] = blocker if cancel_at == :inline
+        dependencies[:blocker] = :blocker if cancel_at == :container
+        api.get "/test", depends: dependencies do |*, **|
+          blocker.call
+          flunk "Cancelled request must not complete"
+        end
+      end
+
+      Async do |task|
+        request = task.async { Rack::MockRequest.new(app).get("/test") }
+        assert_equal [:acquired, :blocked], events
+        request.stop
+        request.wait
+        assert request.stopped?
+      end.wait
+      assert_equal [:acquired, :blocked, :cleanup_started, :cleanup_finished], events
+    end
+  end
+
+  def test_stop_during_yielding_cleanup_finishes_unwinding
+    events = []
+    app = FunApi::App.new do |api|
+      api.register(:first) { ["first", -> { events << :first }] }
+      api.register(:second) do |provide|
+        provide.call("second")
+      ensure
+        events << :cleanup_started
+        sleep 0.01
+        events << :cleanup_finished
+      end
+      api.get "/test", depends: [:first, :second] do |*, **|
+        raise FunApi::HTTPException.new(status_code: 401, detail: "original")
+      end
+    end
+
+    Async do |task|
+      request = task.async { Rack::MockRequest.new(app).get("/test") }
+      assert_equal [:cleanup_started], events
+      request.stop
+      request.wait
+      assert request.stopped?
+    end.wait
+    assert_equal [:cleanup_started, :cleanup_finished, :first], events
+  end
+
+  def test_failing_inline_cleanups_do_not_replace_handler_exception
+    [StandardError, Async::Stop].each do |error_class|
+      events = []
+      app = FunApi::App.new do |api|
+        api.get "/test", depends: {
+          first: -> { ["first", -> { events << :first }] },
+          second: -> {
+            ["second", -> {
+              sleep 0
+              events << :second
+              raise error_class, "cleanup failure"
+            }]
+          }
+        } do |*, **|
+          raise FunApi::HTTPException.new(status_code: 409, detail: "original conflict")
+        end
+      end
+
+      capture_io do
+        response = async_request(app, :get, "/test")
+        assert_equal 409, response.status
+        assert_equal "original conflict", JSON.parse(response.body)["detail"]
+      end
+      assert_equal [:second, :first], events
+    end
+  end
+
   def test_cleanup_called_on_success
     cleanup_called = false
     resource_value = nil
