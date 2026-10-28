@@ -4,15 +4,17 @@ title: Error Handling
 
 # Error Handling
 
-FunApi provides FastAPI-style error responses.
+FunApi provides FastAPI-style error responses. For the complete contract — every
+error shape (400/404/422/426/500 and dev-mode variants) an API consumer or agent
+can encounter — see the [Errors Reference](/docs/patterns/errors-reference).
 
 ## HTTPException
 
 Raise `HTTPException` to return an error response:
 
 ```ruby
-api.get '/users/:id' do |input, req, task|
-  user = find_user(input[:path]['id'])
+api.get '/users/:id' do |input, req|
+  user = find_user(input[:path][:id])
   
   unless user
     raise FunApi::HTTPException.new(
@@ -96,12 +98,67 @@ Response (422):
 }
 ```
 
+## Registered Exception Handlers
+
+Register a handler for a specific exception class with `exception_handler`. The
+block receives the raised error and the `Rack::Request`, and returns the usual
+`[payload, status]` tuple:
+
+```ruby
+class RecordNotFound < StandardError; end
+
+app = FunApi::App.new do |api|
+  api.exception_handler(RecordNotFound) do |error, req|
+    [{ detail: error.message }, 404]
+  end
+
+  api.get '/users/:id' do |input, req|
+    user = find_user(input[:path][:id])
+    raise RecordNotFound, "User not found" unless user
+    [{ user: user }, 200]
+  end
+end
+```
+
+Handlers are matched by class ancestry, so a handler registered for a base
+class also catches its subclasses. The most specific registered class wins.
+
+## Unhandled Errors (500 catch-all)
+
+Any `StandardError` that is not an `HTTPException` and has no registered handler
+becomes a clean JSON `500` response:
+
+```json
+{
+  "detail": "Internal Server Error"
+}
+```
+
+To aid debugging, the error class, message, and backtrace are included only when
+running in development (`FUNAPI_ENV` or `RACK_ENV` set to `development`):
+
+```json
+{
+  "detail": {
+    "error": "RuntimeError",
+    "message": "something broke",
+    "backtrace": ["app.rb:12:in ...", "..."]
+  }
+}
+```
+
+In development, if the request's `Accept` header prefers `text/html` (a browser),
+the same unhandled-error 500 is rendered as a minimal, readable HTML traceback
+page instead of JSON — no external assets. API clients (which send
+`Accept: application/json`) still get the structured JSON above. Both are
+disabled in production, where every 500 is the generic message.
+
 ## Handling Exceptions in Handlers
 
 Use standard Ruby exception handling:
 
 ```ruby
-api.get '/external' do |input, req, task|
+api.get '/external' do |input, req|
   begin
     data = ExternalAPI.fetch
     [{ data: data }, 200]
@@ -144,9 +201,9 @@ class UnauthorizedError < FunApi::HTTPException
 end
 
 # Usage
-api.get '/users/:id' do |input, req, task|
-  user = find_user(input[:path]['id'])
-  raise NotFoundError.new('User', input[:path]['id']) unless user
+api.get '/users/:id' do |input, req|
+  user = find_user(input[:path][:id])
+  raise NotFoundError.new('User', input[:path][:id]) unless user
   [{ user: user }, 200]
 end
 ```

@@ -61,16 +61,16 @@ app = FunApi::App.new do |api|
   end
 
   # Routes with validation
-  api.post '/users', body: UserSchema do |input, req, task|
+  api.post '/users', body: UserSchema do |input, req|
     # input[:body] is already validated
     [{ user: input[:body] }, 201]
   end
 
   # Async operations
-  api.get '/dashboard/:id' do |input, req, task|
+  api.get '/dashboard/:id' do |input, req|
     # Concurrent fetches
-    user = task.async { fetch_user(input[:path]['id']) }
-    posts = task.async { fetch_posts(input[:path]['id']) }
+    user = FunApi.async { fetch_user(input[:path][:id]) }
+    posts = FunApi.async { fetch_posts(input[:path][:id]) }
     
     [{ user: user.wait, posts: posts.wait }, 200]
   end

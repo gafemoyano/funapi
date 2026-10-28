@@ -55,7 +55,7 @@ app = FunApi::App.new(
     logger
   end
 
-  api.get "/" do |_input, _req, _task|
+  api.get "/" do |_input, _req|
     [{
       message: "Background Tasks Demo API",
       endpoints: {
@@ -69,7 +69,7 @@ app = FunApi::App.new(
     }, 200]
   end
 
-  api.post "/signup", body: UserSchema do |input, _req, _task, background:|
+  api.post "/signup", body: UserSchema do |input, _req, background:|
     user_data = input[:body]
 
     user_id = USERS_DB.size + 1
@@ -94,11 +94,11 @@ app = FunApi::App.new(
     [{user: user, message: "Signup successful! Check your email."}, 201]
   end
 
-  api.get "/users" do |_input, _req, _task|
+  api.get "/users" do |_input, _req|
     [{users: USERS_DB, count: USERS_DB.size}, 200]
   end
 
-  api.post "/send-batch-emails", depends: [:logger] do |_input, _req, _task, logger:, background:|
+  api.post "/send-batch-emails", depends: [:logger] do |_input, _req, logger:, background:|
     user_count = USERS_DB.size
 
     return [{error: "No users to email"}, 400] if user_count.zero?
@@ -117,7 +117,7 @@ app = FunApi::App.new(
     [{message: "#{user_count} emails queued for sending", count: user_count}, 200]
   end
 
-  api.get "/stats" do |_input, _req, _task|
+  api.get "/stats" do |_input, _req|
     [{
       users: USERS_DB.size,
       emails_sent: FAKE_EMAILS.size,

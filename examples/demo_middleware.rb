@@ -35,12 +35,12 @@ app = FunApi::App.new(
   api.use SimpleMiddleware
   api.use LoggingMiddleware, "ACCESS"
 
-  api.get "/test" do |_input, _req, _task|
+  api.get "/test" do |_input, _req|
     [{message: "Middleware test successful!"}, 200]
   end
 
-  api.get "/hello/:name" do |input, _req, _task|
-    name = input[:path]["name"]
+  api.get "/hello/:name" do |input, _req|
+    name = input[:path][:name]
     [{greeting: "Hello, #{name}!"}, 200]
   end
 end

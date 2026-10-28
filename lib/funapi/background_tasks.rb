@@ -2,7 +2,7 @@
 
 module FunApi
   class BackgroundTasks
-    def initialize(task)
+    def initialize(task = nil)
       @task = task
       @tasks = []
     end
@@ -13,32 +13,12 @@ module FunApi
     end
 
     def execute
-      return if @tasks.empty?
-
       @tasks.each do |task_def|
-        callable = task_def[:callable]
-        args = task_def[:args]
-        kwargs = task_def[:kwargs]
-
-        @task.async do
-          if callable.respond_to?(:call)
-            if kwargs.empty?
-              callable.call(*args)
-            else
-              callable.call(*args, **kwargs)
-            end
-          elsif callable.is_a?(Symbol)
-            raise ArgumentError, "Cannot call Symbol #{callable} without a context object"
-          else
-            raise ArgumentError, "Task must be callable or Symbol, got #{callable.class}"
-          end
-        rescue => e
-          warn "Background task failed: #{e.class} - #{e.message}"
-          warn e.backtrace.first(3).join("\n") if e.backtrace
-        end
+        invoke(task_def)
+      rescue => e
+        warn "Background task failed: #{e.class} - #{e.message}"
+        warn e.backtrace.first(3).join("\n") if e.backtrace
       end
-
-      @task.children.each(&:wait)
     end
 
     def empty?
@@ -47,6 +27,24 @@ module FunApi
 
     def size
       @tasks.size
+    end
+
+    private
+
+    def invoke(task_def)
+      callable = task_def[:callable]
+      args = task_def[:args]
+      kwargs = task_def[:kwargs]
+
+      unless callable.respond_to?(:call)
+        raise ArgumentError, "background task must be callable (a proc, lambda, or method) — got #{callable.class}"
+      end
+
+      if kwargs.empty?
+        callable.call(*args)
+      else
+        callable.call(*args, **kwargs)
+      end
     end
   end
 end

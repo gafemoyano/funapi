@@ -22,7 +22,7 @@ templates = FunApi::Templates.new(
 Return a `TemplateResponse` from your handler:
 
 ```ruby
-api.get '/' do |input, req, task|
+api.get '/' do |input, req|
   templates.response('home.html.erb', title: 'Home', user: current_user)
 end
 ```
@@ -74,7 +74,7 @@ Use `yield_content` to insert the template content.
 For partials or HTMX responses, disable the layout:
 
 ```ruby
-api.post '/items' do |input, req, task|
+api.post '/items' do |input, req|
   item = create_item(input[:body])
   templates.response('items/_item.html.erb', layout: false, item: item, status: 201)
 end
@@ -90,11 +90,11 @@ templates = FunApi::Templates.new(directory: 'templates')
 public_templates = templates.with_layout('layouts/public.html.erb')
 admin_templates = templates.with_layout('layouts/admin.html.erb')
 
-api.get '/' do |input, req, task|
+api.get '/' do |input, req|
   public_templates.response('home.html.erb', title: 'Home')
 end
 
-api.get '/admin' do |input, req, task|
+api.get '/admin' do |input, req|
   admin_templates.response('admin/dashboard.html.erb', title: 'Dashboard')
 end
 ```
@@ -125,20 +125,20 @@ FunApi templates work great with HTMX:
 
 ```ruby
 # Full page with layout
-api.get '/items' do |input, req, task|
+api.get '/items' do |input, req|
   items = fetch_items
   templates.response('items/index.html.erb', items: items)
 end
 
 # Partial for HTMX insertion
-api.post '/items', body: ItemSchema do |input, req, task|
+api.post '/items', body: ItemSchema do |input, req|
   item = create_item(input[:body])
   templates.response('items/_item.html.erb', layout: false, item: item, status: 201)
 end
 
 # Empty response for HTMX delete
-api.delete '/items/:id' do |input, req, task|
-  delete_item(input[:path]['id'])
+api.delete '/items/:id' do |input, req|
+  delete_item(input[:path][:id])
   FunApi::TemplateResponse.new('')
 end
 ```

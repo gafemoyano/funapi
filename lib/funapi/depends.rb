@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "dependency_wrapper"
+
 module FunApi
   class Depends
     attr_reader :callable, :sub_dependencies
@@ -12,25 +14,25 @@ module FunApi
     end
 
     def call(context, cache = {})
-      cache_key = object_id
+      cache_key = self
 
       return cache[cache_key] if cache.key?(cache_key)
 
-      resolved_deps, sub_cleanups = resolve_sub_dependencies(context, cache)
+      owns_registry = !context.key?(:cleanup_registry)
+      registry = context[:cleanup_registry] || CleanupRegistry.new
+      context = context.merge(cleanup_registry: registry)
+      resolved_deps = resolve_sub_dependencies(context, cache)
       available_context = context.merge(resolved_deps)
 
       result, cleanup = execute_callable(available_context)
+      registry << ManagedDependency.new(result, cleanup) if cleanup
 
-      combined_cleanup = if sub_cleanups.any? || cleanup
-        lambda {
-          sub_cleanups.each(&:call)
-          cleanup&.call
-        }
-      end
-
-      final_result = [result, combined_cleanup]
+      final_result = [result, (registry.method(:cleanup) if owns_registry && !registry.empty?)]
       cache[cache_key] = final_result
+      completed = true
       final_result
+    ensure
+      registry.cleanup if owns_registry && !completed
     end
 
     private
@@ -38,42 +40,28 @@ module FunApi
     def validate_callable!
       return if @callable.respond_to?(:call)
 
-      raise ArgumentError, "Dependency must be callable (respond to :call)"
+      raise ArgumentError,
+        "dependency must be callable (respond to :call) — pass a proc, lambda, method, or an object with a #call method; got #{@callable.class}"
     end
 
     def resolve_sub_dependencies(context, cache)
-      cleanups = []
-
-      resolved = @sub_dependencies.transform_values do |dep|
-        result = if dep.is_a?(Depends)
-          dep.call(context, cache)
+      @sub_dependencies.transform_values do |dep|
+        if dep.is_a?(Depends)
+          dep.call(context, cache).first
         elsif dep.is_a?(Symbol)
           container = context[:container]
           unless container&.respond_to?(:resolve)
-            raise ArgumentError, "Cannot resolve symbol dependency :#{dep} without container in context"
+            raise ArgumentError,
+              "cannot resolve symbol dependency :#{dep} — it must name a dependency registered with api.register(:#{dep}) { ... }"
           end
 
-          wrapper = container.resolve(dep)
-          resource = wrapper.call
-          [resource, nil]
-
+          context[:cleanup_registry].resolve_container(container, dep, cache)
         elsif dep.respond_to?(:call)
-          Depends.new(dep).call(context, cache)
+          Depends.new(dep).call(context, cache).first
         else
-          [dep, nil]
+          dep
         end
-
-        resource, cleanup = if result.is_a?(Array) && result.length == 2
-          result
-        else
-          [result, nil]
-        end
-
-        cleanups << cleanup if cleanup
-        resource
       end
-
-      [resolved, cleanups]
     end
 
     def extract_resource_and_cleanup_from_result(result)

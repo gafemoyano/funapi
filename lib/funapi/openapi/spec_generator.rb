@@ -33,7 +33,7 @@ module FunApi
         paths = {}
 
         @routes.each do |route|
-          next if route.metadata[:internal]
+          next if route.metadata[:internal] || route.metadata[:websocket]
 
           path_template = convert_path_template(route.metadata[:path_template])
           paths[path_template] ||= {}
@@ -52,6 +52,8 @@ module FunApi
         parameters.concat(build_path_parameters(route))
         parameters.concat(build_query_parameters(route))
 
+        tags = route.metadata[:tags]
+        operation[:tags] = tags if tags && !tags.empty?
         operation[:parameters] = parameters unless parameters.empty?
         operation[:requestBody] = build_request_body(route) if route.metadata[:body_schema]
         operation[:responses] = build_responses(route)
@@ -60,12 +62,18 @@ module FunApi
       end
 
       def build_path_parameters(route)
+        path_schema = route.metadata[:path_schema]
+        json_schema = path_schema ? SchemaConverter.to_json_schema(unwrap_array_schema(path_schema)) : nil
+        properties = json_schema && json_schema[:properties]
+
         route.keys.map do |key|
+          prop_schema = properties && (properties[key] || properties[key.to_s])
+
           {
             name: key,
             in: "path",
             required: true,
-            schema: {type: "string"}
+            schema: prop_schema || {type: "string"}
           }
         end
       end
@@ -135,7 +143,11 @@ module FunApi
         schema_obj = unwrap_array_schema(schema)
         is_array = schema.is_a?(Array)
 
-        schema_name = SchemaConverter.extract_schema_name(schema_obj)
+        schema_name = if SchemaConverter.model?(schema_obj)
+          schema_obj.name.split("::").last
+        else
+          SchemaConverter.extract_schema_name(schema_obj)
+        end
 
         unless schema_name
           @schema_counter += 1

@@ -220,4 +220,50 @@ class TestDependencyInjection < Minitest::Test
     data = JSON.parse(res.body, symbolize_names: true)
     assert_equal "async_result", data[:value]
   end
+
+  def test_http_exception_from_dependency_propagates
+    app = FunApi::App.new do |api|
+      api.get "/protected",
+        depends: {
+          user: -> { raise FunApi::HTTPException.new(status_code: 401, detail: "Not authenticated") }
+        } do |_input, _req, _task, user:|
+        [{user: user}, 200]
+      end
+    end
+
+    res = async_request(app, :get, "/protected")
+    assert_equal 401, res.status
+    data = JSON.parse(res.body, symbolize_names: true)
+    assert_equal "Not authenticated", data[:detail]
+  end
+
+  def test_validation_error_from_dependency_propagates
+    app = FunApi::App.new do |api|
+      api.get "/needs-token",
+        depends: {
+          token: -> { raise FunApi::HTTPException.new(status_code: 403) }
+        } do |_input, _req, _task, token:|
+        [{token: token}, 200]
+      end
+    end
+
+    res = async_request(app, :get, "/needs-token")
+    assert_equal 403, res.status
+  end
+
+  def test_genuine_dependency_failure_becomes_500
+    app = FunApi::App.new do |api|
+      api.get "/broken",
+        depends: {
+          thing: -> { raise "boom" }
+        } do |_input, _req, _task, thing:|
+        [{thing: thing}, 200]
+      end
+    end
+
+    res = async_request(app, :get, "/broken")
+    assert_equal 500, res.status
+    data = JSON.parse(res.body, symbolize_names: true)
+    assert_match(/Dependency resolution failed/, data[:detail])
+  end
 end

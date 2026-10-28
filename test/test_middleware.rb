@@ -199,4 +199,48 @@ class TestMiddleware < Minitest::Test
 
     assert_same app, result
   end
+
+  class CountingMiddleware
+    def self.instances
+      @instances ||= 0
+    end
+
+    def self.instances=(value)
+      @instances = value
+    end
+
+    def initialize(app)
+      @app = app
+      self.class.instances += 1
+    end
+
+    def call(env)
+      @app.call(env)
+    end
+  end
+
+  def test_middleware_chain_is_built_once
+    CountingMiddleware.instances = 0
+
+    app = app_with_middleware do |api|
+      api.use CountingMiddleware
+    end
+
+    async_request(app, :get, "/test")
+    async_request(app, :get, "/test")
+    async_request(app, :get, "/test")
+
+    assert_equal 1, CountingMiddleware.instances
+  end
+
+  def test_use_after_first_request_raises
+    app = app_with_middleware do |api|
+      api.use TestMiddleware1
+    end
+
+    async_request(app, :get, "/test")
+
+    error = assert_raises(RuntimeError) { app.use(TestMiddleware2) }
+    assert_match(/after the application has started/, error.message)
+  end
 end

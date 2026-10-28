@@ -25,7 +25,7 @@ app = FunApi::App.new(
   version: "1.0.0",
   description: "A simple user management API demonstrating OpenAPI generation"
 ) do |api|
-  api.get "/users", query: QuerySchema, response_schema: [UserOutputSchema] do |_input, _req, _task|
+  api.get "/users", query: QuerySchema, response_schema: [UserOutputSchema] do |_input, _req|
     users = [
       {id: 1, name: "John Doe", email: "john@example.com", age: 30},
       {id: 2, name: "Jane Smith", email: "jane@example.com"}
@@ -33,24 +33,24 @@ app = FunApi::App.new(
     [users, 200]
   end
 
-  api.get "/users/:id", response_schema: UserOutputSchema do |input, _req, _task|
-    user_id = input[:path]["id"]
+  api.get "/users/:id", response_schema: UserOutputSchema do |input, _req|
+    user_id = input[:path][:id]
     user = {id: user_id.to_i, name: "John Doe", email: "john@example.com", age: 30}
     [user, 200]
   end
 
-  api.post "/users", body: UserCreateSchema, response_schema: UserOutputSchema do |input, _req, _task|
+  api.post "/users", body: UserCreateSchema, response_schema: UserOutputSchema do |input, _req|
     user = input[:body].merge(id: rand(1000))
     [user, 201]
   end
 
-  api.put "/users/:id", body: UserCreateSchema, response_schema: UserOutputSchema do |input, _req, _task|
-    user_id = input[:path]["id"]
+  api.put "/users/:id", body: UserCreateSchema, response_schema: UserOutputSchema do |input, _req|
+    user_id = input[:path][:id]
     user = input[:body].merge(id: user_id.to_i)
     [user, 200]
   end
 
-  api.delete "/users/:id" do |_input, _req, _task|
+  api.delete "/users/:id" do |_input, _req|
     [{message: "User deleted"}, 200]
   end
 end

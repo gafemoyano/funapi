@@ -7,15 +7,16 @@ gemspec
 group :development do
   gem "irb"
   gem "rake", "~> 13.0"
-  gem "standard", "~> 1.3"
+  gem "standard", "~> 1.51.1"
 end
 
 group :test do
   gem "minitest", "~> 5.16"
 
-  # Database integration testing (optional)
+  # Database integration testing (optional).
+  # Users add `sequel` to their own Gemfile; `pg` >= 1.3 is fiber-scheduler-aware.
   gem "base64"
-  gem "db", "~> 0.14"
-  gem "db-postgres", "~> 0.9"
+  gem "sequel", "~> 5.0", ">= 5.63"
+  gem "pg", "~> 1.3"
   gem "testcontainers-postgres", "~> 0.1"
 end

@@ -12,7 +12,7 @@ Gem::Specification.new do |spec|
   spec.description = "Get an API started quickly, with performance in mind and, of course, have some fun with Ruby."
   spec.homepage = "https://github.com/gafemoyano/funapi"
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.2.0"
+  spec.required_ruby_version = ">= 3.3.2"
 
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = spec.homepage
@@ -33,10 +33,11 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "async", ">= 2.8"
+  spec.add_dependency "async-websocket", ">= 0.30"
   spec.add_dependency "dry-container", ">= 0.11"
   spec.add_dependency "dry-schema", ">= 1.13"
   spec.add_dependency "falcon", ">= 0.44"
-  spec.add_dependency "rack", ">= 3.0.0", "< 4"
+  spec.add_dependency "rack", ">= 3.0.3", "< 4"
   spec.add_dependency "rack-cors", ">= 2.0"
 
   # For more information and examples about making a new gem, check out our

@@ -23,25 +23,25 @@ app = FunApi::App.new(
     allowed_hosts: ["localhost", "127.0.0.1", /\.example\.com$/]
   )
 
-  api.get "/" do |_input, _req, _task|
+  api.get "/" do |_input, _req|
     [{message: "Welcome to FunApi Middleware Demo!"}, 200]
   end
 
-  api.get "/health" do |_input, _req, _task|
+  api.get "/health" do |_input, _req|
     [{status: "healthy", timestamp: Time.now.to_i}, 200]
   end
 
-  api.post "/users", body: UserSchema do |input, _req, _task|
+  api.post "/users", body: UserSchema do |input, _req|
     user = input[:body].merge(id: rand(1000), created_at: Time.now.to_i)
     [user, 201]
   end
 
-  api.get "/async-demo" do |_input, _req, task|
-    result1 = task.async do
+  api.get "/async-demo" do |_input, _req|
+    result1 = FunApi.async do
       sleep 0.1
       {data: "from task 1"}
     end
-    result2 = task.async do
+    result2 = FunApi.async do
       sleep 0.1
       {data: "from task 2"}
     end

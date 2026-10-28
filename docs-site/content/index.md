@@ -16,11 +16,11 @@ UserSchema = FunApi::Schema.define do
 end
 
 app = FunApi::App.new(title: "My API", version: "1.0.0") do |api|
-  api.get '/hello' do |input, req, task|
+  api.get '/hello' do |input, req|
     [{ message: 'Hello, World!' }, 200]
   end
 
-  api.post '/users', body: UserSchema do |input, req, task|
+  api.post '/users', body: UserSchema do |input, req|
     [{ created: input[:body] }, 201]
   end
 end
@@ -47,6 +47,9 @@ FunApi brings together proven Ruby libraries:
 
 ## Installation
 
+Requires Ruby **3.3.2 or newer** and Rack **3.0.3 or newer** (below 4).
+Use the latest patch release of a supported Ruby series.
+
 Add to your Gemfile:
 
 ```ruby
@@ -66,8 +69,8 @@ require 'funapi'
 require 'funapi/server/falcon'
 
 app = FunApi::App.new do |api|
-  api.get '/hello/:name' do |input, req, task|
-    name = input[:path]['name']
+  api.get '/hello/:name' do |input, req|
+    name = input[:path][:name]
     [{ message: "Hello, #{name}!" }, 200]
   end
 end

@@ -50,7 +50,7 @@ end
 ### Dockerfile
 
 ```dockerfile
-FROM ruby:3.2-alpine
+FROM ruby:3.3-alpine
 
 RUN apk add --no-cache build-base
 
@@ -195,7 +195,7 @@ end
 ### Health Check
 
 ```ruby
-api.get '/health' do |input, req, task|
+api.get '/health' do |input, req|
   [{ status: 'ok', time: Time.now.iso8601 }, 200]
 end
 ```

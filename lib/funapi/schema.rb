@@ -6,6 +6,10 @@ module FunApi
       Dry::Schema.Params(&block)
     end
 
+    def self.model?(schema)
+      schema.is_a?(Class) && schema < FunApi::Model
+    end
+
     def self.validate(schema, data, location: "body")
       return data unless schema
 
@@ -13,15 +17,14 @@ module FunApi
         item_schema = schema.first
         data_array = data.is_a?(Array) ? data : []
 
-        results = data_array.map do |item|
-          result = item_schema.call(item || {})
-          raise ValidationError.new(errors: result.errors) unless result.success?
-
-          result.to_h
-        end
-
-        return results
+        return data_array.map { |item| validate_one(item_schema, item) }
       end
+
+      validate_one(schema, data)
+    end
+
+    def self.validate_one(schema, data)
+      return schema.validate(data) if model?(schema)
 
       result = schema.call(data || {})
       raise ValidationError.new(errors: result.errors) unless result.success?
@@ -36,18 +39,25 @@ module FunApi
         item_schema = schema.first
         data_array = data.is_a?(Array) ? data : []
 
-        return data_array.map do |item|
-          result = item_schema.call(item)
+        return data_array.map { |item| validate_response_one(item_schema, item) }
+      end
 
-          unless result.success?
-            raise HTTPException.new(
-              status_code: 500,
-              detail: "Response validation failed: #{result.errors.to_h}"
-            )
-          end
+      validate_response_one(schema, data)
+    end
 
-          result.to_h
+    def self.validate_response_one(schema, data)
+      if model?(schema)
+        dumped = schema.dump(data)
+        result = schema.engine_schema.call(dumped || {})
+
+        unless result.success?
+          raise HTTPException.new(
+            status_code: 500,
+            detail: "Response validation failed: #{result.errors.to_h}"
+          )
         end
+
+        return result.to_h
       end
 
       result = schema.call(data)
